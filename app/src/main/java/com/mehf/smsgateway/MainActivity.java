@@ -8,7 +8,6 @@ import android.app.PendingIntent;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
-import android.content.IntentFilter;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.graphics.Color;
@@ -68,6 +67,37 @@ public class MainActivity extends AppCompatActivity {
     private long currentTotalUsed = 0;
     private String currentActiveDate = "";
     private boolean limitToastShown = false;
+
+    // ==================== [NEW] STATIC SMS RECEIVER ====================
+    // यह क्लास SMS सेंड होने का रियल-टाइम जवाब पकड़ेगी
+    public static class SmsResultReceiver extends BroadcastReceiver {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            String docId = intent.getStringExtra("docId");
+            String schoolId = intent.getStringExtra("schoolId");
+            boolean isAdmin = intent.getBooleanExtra("isAdmin", false);
+            
+            if (docId == null) return;
+            
+            FirebaseFirestore database = FirebaseFirestore.getInstance();
+            
+            if (getResultCode() == Activity.RESULT_OK) {
+                // SMS चला गया
+                database.collection("sms_logs").document(docId).update("status", "sent");
+                
+                // अगर एडमिन नहीं है, तभी स्कूल का लिमिट काटें
+                if (!isAdmin && schoolId != null && !schoolId.isEmpty()) {
+                    database.collection("users").document(schoolId).update(
+                        "used_sms", FieldValue.increment(1),
+                        "daily_used", FieldValue.increment(1)
+                    );
+                }
+            } else {
+                // SMS फेल हो गया (बैलेंस नहीं है या नंबर गलत है)
+                database.collection("sms_logs").document(docId).update("status", "failed");
+            }
+        }
+    }
 
     @SuppressLint("HardwareIds")
     @Override
@@ -670,71 +700,35 @@ public class MainActivity extends AppCompatActivity {
           });
     }
 
-    // ==================== [NEW] ADVANCED DELIVERY TRACKING ENGINE ====================
+    // ==================== [NEW] SECURE INTENT SMS DELIVERY ENGINE ====================
     private void sendSmsWithDualSim(String phone, String msg, String docId) {
+        // Explicit Intent to Static Receiver
+        Intent intent = new Intent(this, SmsResultReceiver.class);
+        intent.setAction("SMS_SENT_ACTION");
+        intent.putExtra("docId", docId);
+        intent.putExtra("schoolId", loggedInSchool);
+        intent.putExtra("isAdmin", isAdminMode);
+        
+        // FLAG_MUTABLE & FLAG_UPDATE_CURRENT (Secure configuration)
+        PendingIntent sentPI = PendingIntent.getBroadcast(this, docId.hashCode(), intent, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_MUTABLE);
+
         try {
-            // Unique Code For Every SMS
-            String SENT = "SMS_SENT_" + docId;
-            PendingIntent sentPI = PendingIntent.getBroadcast(this, 0, new Intent(SENT), PendingIntent.FLAG_IMMUTABLE);
-
-            // Network Operator का जवाब सुनने वाला Receiver
-            BroadcastReceiver sendReceiver = new BroadcastReceiver() {
-                @Override
-                public void onReceive(Context arg0, Intent arg1) {
-                    switch (getResultCode()) {
-                        case Activity.RESULT_OK:
-                            // Network ne kaha: "Message successfully pass ho gaya"
-                            updateStatus(docId, "sent");
-                            break;
-                        default: 
-                            // Network ne kaha: "Balance nahi hai / Invalid Number / Network Error"
-                            updateStatus(docId, "failed");
-                            break;
-                    }
-                    try {
-                        unregisterReceiver(this); // Receiver ko band karo
-                    } catch(Exception e){}
-                }
-            };
-
-            // Receiver को चालू करना
-            registerReceiver(sendReceiver, new IntentFilter(SENT));
-
             SubscriptionManager subManager = SubscriptionManager.from(this);
             if (ActivityCompat.checkSelfPermission(this, Manifest.permission.READ_PHONE_STATE) == PackageManager.PERMISSION_GRANTED) {
                 List<SubscriptionInfo> simInfoList = subManager.getActiveSubscriptionInfoList();
                 
+                SmsManager smsManager;
                 if (simInfoList != null && simInfoList.size() > 0) {
-                    try {
-                        SmsManager sms1 = SmsManager.getSmsManagerForSubscriptionId(simInfoList.get(0).getSubscriptionId());
-                        sms1.sendTextMessage(phone, null, msg, sentPI, null);
-                    } catch (Exception e1) {
-                        if (simInfoList.size() > 1) {
-                            SmsManager sms2 = SmsManager.getSmsManagerForSubscriptionId(simInfoList.get(1).getSubscriptionId());
-                            sms2.sendTextMessage(phone, null, msg, sentPI, null);
-                        } else {
-                            updateStatus(docId, "failed");
-                        }
-                    }
+                    smsManager = SmsManager.getSmsManagerForSubscriptionId(simInfoList.get(0).getSubscriptionId());
                 } else {
-                    SmsManager.getDefault().sendTextMessage(phone, null, msg, sentPI, null);
+                    smsManager = SmsManager.getDefault();
                 }
+                
+                smsManager.sendTextMessage(phone, null, msg, sentPI, null);
             }
         } catch (Exception ex) {
-            updateStatus(docId, "failed");
-        }
-    }
-
-    // Status Update aur Limit Katne ka Safe System
-    private void updateStatus(String docId, String status) {
-        db.collection("sms_logs").document(docId).update("status", status);
-        
-        // Agar status "sent" (Result OK) aayega, tabhi School ka Message Katega!
-        if (status.equals("sent") && !isAdminMode) {
-            db.collection("users").document(loggedInSchool).update(
-                "used_sms", FieldValue.increment(1),
-                "daily_used", FieldValue.increment(1)
-            );
+            Toast.makeText(this, "Send Error: " + ex.getMessage(), Toast.LENGTH_LONG).show();
+            db.collection("sms_logs").document(docId).update("status", "failed");
         }
     }
 
