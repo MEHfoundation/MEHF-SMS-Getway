@@ -6,7 +6,6 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.READ_PHONE_STATE" />
 
-    <!-- यहाँ android:icon और android:label में बदलाव किया गया है -->
     <application
         android:allowBackup="true"
         android:icon="@drawable/logo"
@@ -21,5 +20,15 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- नया रिसीवर यहाँ जोड़ा गया है -->
+        <receiver 
+            android:name=".MainActivity$SmsResultReceiver" 
+            android:exported="true">
+            <intent-filter>
+                <action android:name="SMS_SENT_ACTION" />
+            </intent-filter>
+        </receiver>
+        
     </application>
 </manifest>
