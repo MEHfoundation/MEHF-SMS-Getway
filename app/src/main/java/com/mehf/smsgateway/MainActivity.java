@@ -376,7 +376,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     // ==================== 3. ADMIN DASHBOARD ====================
-    private void showAdminDashboard() {
+  private void showAdminDashboard() {
         mainLayout.removeAllViews();
         mainLayout.setPadding(30, 30, 30, 30);
 
@@ -406,16 +406,29 @@ public class MainActivity extends AppCompatActivity {
 
         loadAdminSystemLogs();
 
+        // 🚨 [NEW] एडमिन के लिए Auto-SMS सेंडर चालू करें 🚨
+        loggedInSchool = "admin"; 
+        startAutoSmsSender();
+
+        // 🚨 [NEW] एडमिन भी बॉक्स पर क्लिक करके लिस्ट देख सकेगा 🚨
+        sentSmsTxt.setOnClickListener(v -> fetchAndShowList("sent", "Sent SMS History"));
+        pendingSmsTxt.setOnClickListener(v -> fetchAndShowList("pending", "Pending SMS"));
+        failedSmsTxt.setOnClickListener(v -> fetchAndShowList("failed", "Failed SMS"));
+
         manageSchoolBox.setOnClickListener(v -> showManageSchoolDialog());
         linkSchoolBox.setOnClickListener(v -> showLinkMultipleSchoolDialog());
+        
         logoutBtn.setOnClickListener(v -> {
             db.collection("system_settings").document("admin_data").update("admin_device_id", "");
             sharedPreferences.edit().putBoolean("is_admin_device", false).apply();
-            isAdminMode = false; showLoginScreen();
+            isAdminMode = false; 
+            loggedInSchool = ""; // सेशन क्लियर
+            showLoginScreen();
         });
     }
 
     private void loadAdminSystemLogs() {
+        // यह एडमिन को पूरे डेटाबेस (सभी स्कूलों) का टोटल काउंट दिखाएगा
         db.collection("sms_logs").addSnapshotListener((snaps, e) -> {
             if (snaps == null) return;
             int sent = 0, pending = 0, failed = 0;
@@ -428,7 +441,6 @@ public class MainActivity extends AppCompatActivity {
             sentSmsTxt.setText("Total Sent SMS\n\n" + sent); pendingSmsTxt.setText("Pending SMS\n\n" + pending); failedSmsTxt.setText("Failed SMS\n\n" + failed);
         });
     }
-
     private void showManageSchoolDialog() {
         Toast.makeText(this, "Loading users...", Toast.LENGTH_SHORT).show();
         db.collection("users").get().addOnSuccessListener(docs -> {
