@@ -2,14 +2,17 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="com.mehf.smsgateway">
 
-    <!-- SMS और इंटरनेट की परमिशन -->
     <uses-permission android:name="android.permission.SEND_SMS" />
     <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.READ_PHONE_STATE" />
 
+    <!-- यहाँ android:icon और android:label में बदलाव किया गया है -->
     <application
         android:allowBackup="true"
+        android:icon="@drawable/logo"
         android:label="MEHF SMS Gateway"
-        android:theme="@style/Theme.AppCompat.Light.DarkActionBar">
+        android:theme="@style/Theme.AppCompat.Light.NoActionBar">
+        
         <activity
             android:name=".MainActivity"
             android:exported="true">
