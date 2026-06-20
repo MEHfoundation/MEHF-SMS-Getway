@@ -16,6 +16,7 @@ import android.telephony.SubscriptionManager;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.WindowManager;
 import android.widget.ArrayAdapter;
 import android.widget.Button;
 import android.widget.EditText;
@@ -159,7 +160,6 @@ public class MainActivity extends AppCompatActivity {
             if (doc.exists() && doc.contains("admin_device_id")) {
                 String savedId = doc.getString("admin_device_id");
                 if (deviceId.equals(savedId)) {
-                    // Local memory me save karna ki ye admin device hai
                     sharedPreferences.edit().putBoolean("is_admin_device", true).apply();
                     isAdminMode = true;
                     showAdminDashboard();
@@ -188,7 +188,6 @@ public class MainActivity extends AppCompatActivity {
                     loggedInSchool = username;
                     isAdminMode = false;
                     
-                    // Account linking memory settings
                     sharedPreferences.edit().putString("pass_" + username, password).apply();
                     String linked = sharedPreferences.getString("linked_list", "");
                     if (!linked.contains(username)) {
@@ -206,7 +205,7 @@ public class MainActivity extends AppCompatActivity {
         });
     }
 
-    // ==================== 2. ADMIN DASHBOARD (6 BOXES NOW) ====================
+    // ==================== 2. ADMIN DASHBOARD ====================
     private void showAdminDashboard() {
         mainLayout.removeAllViews();
         mainLayout.setPadding(30, 30, 30, 30);
@@ -238,12 +237,10 @@ public class MainActivity extends AppCompatActivity {
                 LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
         fullWidthParams.setMargins(15, 15, 15, 15);
 
-        // Box 5: Manage School Plan
         TextView manageSchoolBox = createBox("⚙️ Manage School Plan", "#6A1B9A");
         manageSchoolBox.setLayoutParams(fullWidthParams);
         mainLayout.addView(manageSchoolBox);
 
-        // Box 6: Admin Multiple School Link/Switch Option (NEW)
         TextView linkSchoolBox = createBox("🔗 Link Multiple School / Switch Account", "#E65100");
         linkSchoolBox.setLayoutParams(fullWidthParams);
         mainLayout.addView(linkSchoolBox);
@@ -270,7 +267,6 @@ public class MainActivity extends AppCompatActivity {
         });
     }
 
-    // Admin Action: Plan Creator Form
     private void showManageSchoolDialog() {
         Toast.makeText(this, "Loading Schools...", Toast.LENGTH_SHORT).show();
         db.collection("schools").get().addOnSuccessListener(docs -> {
@@ -279,9 +275,12 @@ public class MainActivity extends AppCompatActivity {
                 schoolList.add(d.getId());
             }
 
+            // ScrollView for Dialog
+            ScrollView dialogScroll = new ScrollView(this);
             LinearLayout dialogLayout = new LinearLayout(this);
             dialogLayout.setOrientation(LinearLayout.VERTICAL);
             dialogLayout.setPadding(40, 40, 40, 40);
+            dialogScroll.addView(dialogLayout);
 
             TextView lbl = new TextView(this); lbl.setText("School Chunein:");
             dialogLayout.addView(lbl);
@@ -306,7 +305,13 @@ public class MainActivity extends AppCompatActivity {
             submitBtn.setTextColor(Color.WHITE);
             dialogLayout.addView(submitBtn);
 
-            AlertDialog dialog = new AlertDialog.Builder(this).setTitle("Manage School Plan").setView(dialogLayout).show();
+            AlertDialog dialog = new AlertDialog.Builder(this).setTitle("Manage School Plan").setView(dialogScroll).show();
+
+            // Force Keyboard to work in Dialog
+            if (dialog.getWindow() != null) {
+                dialog.getWindow().clearFlags(WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_ALT_FOCUSABLE_IM);
+                dialog.getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_STATE_VISIBLE);
+            }
 
             submitBtn.setOnClickListener(v -> {
                 String selectedSchool = spinner.getSelectedItem().toString();
@@ -366,7 +371,6 @@ public class MainActivity extends AppCompatActivity {
         row2.addView(pendingSmsTxt); row2.addView(failedSmsTxt);
         mainLayout.addView(row1); mainLayout.addView(row2);
 
-        // Switcher box for school dashboard
         TextView linkSchoolBox = createBox("🔗 Link Multiple School / Switch Account", "#E65100");
         LinearLayout.LayoutParams fullWidthParams = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
@@ -380,7 +384,6 @@ public class MainActivity extends AppCompatActivity {
         sentSmsTxt.setOnClickListener(v -> fetchAndShowList("sent", "Sent SMS History"));
         pendingSmsTxt.setOnClickListener(v -> fetchAndShowList("pending", "Pending SMS"));
         failedSmsTxt.setOnClickListener(v -> fetchAndShowList("failed", "Failed SMS"));
-        
         linkSchoolBox.setOnClickListener(v -> showLinkMultipleSchoolDialog());
     }
 
@@ -406,9 +409,12 @@ public class MainActivity extends AppCompatActivity {
 
     // ==================== 4. MASTER ACCOUNT LINK / SWITCH DIALOG ====================
     private void showLinkMultipleSchoolDialog() {
+        // ScrollView for Keyboard Issue
+        ScrollView dialogScroll = new ScrollView(this);
         LinearLayout dialogLayout = new LinearLayout(this);
         dialogLayout.setOrientation(LinearLayout.VERTICAL);
         dialogLayout.setPadding(30, 30, 30, 30);
+        dialogScroll.addView(dialogLayout);
 
         TextView tableTitle = new TextView(this);
         tableTitle.setText("Linked Accounts Table:");
@@ -425,9 +431,14 @@ public class MainActivity extends AppCompatActivity {
         headerRow.addView(h1); headerRow.addView(h2);
         table.addView(headerRow);
 
-        AlertDialog dialog = new AlertDialog.Builder(this).setTitle("Account Switcher Control").setView(dialogLayout).show();
+        AlertDialog dialog = new AlertDialog.Builder(this).setTitle("Account Switcher Control").setView(dialogScroll).show();
 
-        // [SMART FEATURE]: Agar ye device admin ka hai, to table me Admin mode par wapas jaane ka router jodna
+        // Force Keyboard to work in Dialog
+        if (dialog.getWindow() != null) {
+            dialog.getWindow().clearFlags(WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_ALT_FOCUSABLE_IM);
+            dialog.getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_STATE_VISIBLE);
+        }
+
         if (sharedPreferences.getBoolean("is_admin_device", false)) {
             TableRow adminRow = new TableRow(this);
             TextView adminNameTv = new TextView(this); adminNameTv.setText("⭐ MEHF Admin Panel");
@@ -453,7 +464,6 @@ public class MainActivity extends AppCompatActivity {
             table.addView(adminRow);
         }
 
-        // Baki bache schools ki list table me populate karna
         String linkedListStr = sharedPreferences.getString("linked_list", "");
         if (!linkedListStr.isEmpty()) {
             String[] schools = linkedListStr.split(",");
@@ -483,7 +493,6 @@ public class MainActivity extends AppCompatActivity {
         }
         dialogLayout.addView(table);
 
-        // Naya School Link karne ka form section नीचे
         TextView addTitle = new TextView(this);
         addTitle.setText("\nLink New School Account:");
         addTitle.setTextSize(16f);
@@ -518,7 +527,7 @@ public class MainActivity extends AppCompatActivity {
                     }
                     Toast.makeText(this, "Account link ho gaya!", Toast.LENGTH_SHORT).show();
                     dialog.dismiss();
-                    showLinkMultipleSchoolDialog(); // Refresh table view
+                    showLinkMultipleSchoolDialog();
                 } else {
                     Toast.makeText(this, "Galat Password ya Username!", Toast.LENGTH_SHORT).show();
                 }
@@ -546,7 +555,7 @@ public class MainActivity extends AppCompatActivity {
         return box;
     }
 
-    // ==================== 5. DUAL SIM ENGINE & LOGGER ====================
+    // ==================== 5. UTILS & DUAL SIM ====================
     private void showPlanDetails(DocumentSnapshot doc) {
         String info = "Total SMS: " + doc.get("total_sms") +
                       "\nPerday Limit: " + doc.get("perday_sms") +
