@@ -700,7 +700,7 @@ public class MainActivity extends AppCompatActivity {
           });
     }
 
-    // ==================== [NEW] SECURE INTENT SMS DELIVERY ENGINE ====================
+   // ==================== [NEW] MULTIPART (LONG SMS) DELIVERY ENGINE ====================
     private void sendSmsWithDualSim(String phone, String msg, String docId) {
         // Explicit Intent to Static Receiver
         Intent intent = new Intent(this, SmsResultReceiver.class);
@@ -709,23 +709,39 @@ public class MainActivity extends AppCompatActivity {
         intent.putExtra("schoolId", loggedInSchool);
         intent.putExtra("isAdmin", isAdminMode);
         
-        // FLAG_MUTABLE & FLAG_UPDATE_CURRENT (Secure configuration)
-        PendingIntent sentPI = PendingIntent.getBroadcast(this, docId.hashCode(), intent, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_MUTABLE);
+        PendingIntent sentPI = PendingIntent.getBroadcast(this, docId.hashCode(), intent, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
 
         try {
             SubscriptionManager subManager = SubscriptionManager.from(this);
+            SmsManager smsManager;
+            
             if (ActivityCompat.checkSelfPermission(this, Manifest.permission.READ_PHONE_STATE) == PackageManager.PERMISSION_GRANTED) {
                 List<SubscriptionInfo> simInfoList = subManager.getActiveSubscriptionInfoList();
-                
-                SmsManager smsManager;
                 if (simInfoList != null && simInfoList.size() > 0) {
                     smsManager = SmsManager.getSmsManagerForSubscriptionId(simInfoList.get(0).getSubscriptionId());
                 } else {
                     smsManager = SmsManager.getDefault();
                 }
-                
-                smsManager.sendTextMessage(phone, null, msg, sentPI, null);
+            } else {
+                smsManager = SmsManager.getDefault();
             }
+            
+            // 🚨 MAIN FIX: लंबे और हिंदी (Unicode) मैसेज को तोड़ने का सिस्टम 🚨
+            ArrayList<String> parts = smsManager.divideMessage(msg);
+            ArrayList<PendingIntent> sentIntents = new ArrayList<>();
+            
+            // सिर्फ मैसेज के आखिरी हिस्से में ट्रैकर लगाएँ ताकि स्कूल का लिमिट सिर्फ 1 बार कटे
+            for (int i = 0; i < parts.size(); i++) {
+                if (i == parts.size() - 1) {
+                    sentIntents.add(sentPI); 
+                } else {
+                    sentIntents.add(null);
+                }
+            }
+
+            // Multipart तरीके से भेजें
+            smsManager.sendMultipartTextMessage(phone, null, parts, sentIntents, null);
+            
         } catch (Exception ex) {
             Toast.makeText(this, "Send Error: " + ex.getMessage(), Toast.LENGTH_LONG).show();
             db.collection("sms_logs").document(docId).update("status", "failed");
