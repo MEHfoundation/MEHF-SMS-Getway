@@ -118,10 +118,19 @@ public class MainActivity extends AppCompatActivity {
         RadioGroup roleGroup = new RadioGroup(this);
         roleGroup.setOrientation(LinearLayout.HORIZONTAL);
         roleGroup.setGravity(Gravity.CENTER);
-        RadioButton rdoSchool = new RadioButton(this); rdoSchool.setText("School"); rdoSchool.setChecked(true);
-        RadioButton rdoAdmin = new RadioButton(this); rdoAdmin.setText("Admin");
-        roleGroup.addView(rdoSchool); roleGroup.addView(rdoAdmin);
+        
+        RadioButton rdoSchool = new RadioButton(this); 
+        rdoSchool.setText("School"); 
+        rdoSchool.setId(View.generateViewId());
+        
+        RadioButton rdoAdmin = new RadioButton(this); 
+        rdoAdmin.setText("Admin");
+        rdoAdmin.setId(View.generateViewId());
+        
+        roleGroup.addView(rdoSchool); 
+        roleGroup.addView(rdoAdmin);
         mainLayout.addView(roleGroup);
+        rdoSchool.setChecked(true);
 
         EditText usernameInput = new EditText(this);
         usernameInput.setHint("Username (School ID)");
@@ -142,33 +151,44 @@ public class MainActivity extends AppCompatActivity {
         loginBtn.setLayoutParams(btnParams);
         mainLayout.addView(loginBtn);
 
+        Button recoverBtn = new Button(this);
+        recoverBtn.setText("Recover Account (Admin / School)");
+        recoverBtn.setBackgroundColor(Color.TRANSPARENT);
+        recoverBtn.setTextColor(Color.parseColor("#757575"));
+        LinearLayout.LayoutParams recParams = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        recParams.setMargins(0, 20, 0, 0);
+        recoverBtn.setLayoutParams(recParams);
+        mainLayout.addView(recoverBtn);
+
         loginBtn.setOnClickListener(v -> {
             String user = usernameInput.getText().toString().trim();
             String pass = passwordInput.getText().toString().trim();
 
-            if (rdoAdmin.isChecked()) {
+            if (roleGroup.getCheckedRadioButtonId() == rdoAdmin.getId()) {
                 handleAdminLogin();
             } else {
                 handleSchoolLogin(user, pass, true);
             }
         });
+
+        recoverBtn.setOnClickListener(v -> showMasterRecoveryDialog());
     }
 
     private void handleAdminLogin() {
-        Toast.makeText(this, "Verifying Admin...", Toast.LENGTH_SHORT).show();
+        Toast.makeText(this, "Verifying Admin Device...", Toast.LENGTH_SHORT).show();
         db.collection("system_settings").document("admin_data").get().addOnSuccessListener(doc -> {
-            if (doc.exists() && doc.contains("admin_device_id")) {
+            if (doc.exists() && doc.contains("admin_device_id") && !doc.getString("admin_device_id").isEmpty()) {
                 String savedId = doc.getString("admin_device_id");
                 if (deviceId.equals(savedId)) {
                     sharedPreferences.edit().putBoolean("is_admin_device", true).apply();
                     isAdminMode = true;
                     showAdminDashboard();
                 } else {
-                    showAlert("Notice", "Admin is already logged in on another device. Please select School or contact administrator.");
+                    showAlert("Notice", "Admin is already logged in on another device. Please use Admin Recovery.");
                 }
             } else {
-                db.collection("system_settings").document("admin_data")
-                  .set(new HashMap<String, Object>() {{ put("admin_device_id", deviceId); }});
+                db.collection("system_settings").document("admin_data").update("admin_device_id", deviceId);
                 sharedPreferences.edit().putBoolean("is_admin_device", true).apply();
                 isAdminMode = true;
                 showAdminDashboard();
@@ -176,15 +196,31 @@ public class MainActivity extends AppCompatActivity {
         });
     }
 
-    private void handleSchoolLogin(String username, String password, boolean isFirstLogin) {
+    private void handleSchoolLogin(String username, String password, boolean checkDeviceLock) {
         if(username.isEmpty() || password.isEmpty()){
              Toast.makeText(this, "Username aur Password bharein!", Toast.LENGTH_SHORT).show();
              return;
         }
-        db.collection("schools").document(username).get().addOnSuccessListener(doc -> {
+        db.collection("users").document(username).get().addOnSuccessListener(doc -> {
             if (doc.exists()) {
                 String savedPass = doc.getString("password");
                 if (password.equals(savedPass)) {
+                    
+                    // [NEW SECURITY CHECK]: Agar school ka recovery pin set nahi hai to pehle unse bhariyen
+                    if (!doc.contains("recovery_pin") || doc.getString("recovery_pin") == null || doc.getString("recovery_pin").isEmpty()) {
+                        showFirstTimeSetupDialog(username, doc);
+                        return;
+                    }
+
+                    if (checkDeviceLock && doc.contains("school_device_id") && !doc.getString("school_device_id").isEmpty()) {
+                        String activeDeviceId = doc.getString("school_device_id");
+                        if (!deviceId.equals(activeDeviceId)) {
+                            showAlert("Device Locked", "This school is already active on another device.\n\nDuplicate messages rokne ke liye ek se adhik device allowed nahi hain. Kripya Account Recover karein ya Admin se sampark karein.");
+                            return;
+                        }
+                    }
+
+                    db.collection("users").document(username).update("school_device_id", deviceId);
                     loggedInSchool = username;
                     isAdminMode = false;
                     
@@ -200,12 +236,161 @@ public class MainActivity extends AppCompatActivity {
                     Toast.makeText(this, "Galat Password!", Toast.LENGTH_SHORT).show();
                 }
             } else {
-                Toast.makeText(this, "School ID nahi mila!", Toast.LENGTH_SHORT).show();
+                Toast.makeText(this, "Username nahi mila!", Toast.LENGTH_SHORT).show();
             }
         });
     }
 
-    // ==================== 2. ADMIN DASHBOARD ====================
+    // [NEW DYNAMIC SETUP DIALOG]: Jab school pehli baar login karega tab khulega
+    private void showFirstTimeSetupDialog(String username, DocumentSnapshot doc) {
+        ScrollView dialogScroll = new ScrollView(this);
+        LinearLayout layout = new LinearLayout(this);
+        layout.setOrientation(LinearLayout.VERTICAL);
+        layout.setPadding(40, 40, 40, 40);
+        dialogScroll.addView(layout);
+
+        TextView alertTitle = new TextView(this);
+        alertTitle.setText("🔒 First Time Account Setup");
+        alertTitle.setTextSize(18f);
+        alertTitle.setTextColor(Color.parseColor("#1A237E"));
+        alertTitle.setPadding(0, 0, 0, 20);
+        layout.addView(alertTitle);
+
+        EditText schoolNameInput = new EditText(this);
+        schoolNameInput.setHint("Enter Your School/Coaching Name");
+        if(doc.contains("school_name") && doc.getString("school_name") != null) {
+            schoolNameInput.setText(doc.getString("school_name"));
+        }
+        layout.addView(schoolNameInput);
+
+        EditText pinInput = new EditText(this);
+        pinInput.setHint("Create 4-Digit Security Recovery PIN");
+        layout.addView(pinInput);
+
+        Button saveBtn = new Button(this);
+        saveBtn.setText("ACTIVATE ACCOUNT & START");
+        saveBtn.setBackgroundColor(Color.parseColor("#2E7D32"));
+        saveBtn.setTextColor(Color.WHITE);
+        layout.addView(saveBtn);
+
+        AlertDialog dialog = new AlertDialog.Builder(this).setView(dialogScroll).setCancelable(false).show();
+
+        if (dialog.getWindow() != null) {
+            dialog.getWindow().clearFlags(WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_ALT_FOCUSABLE_IM);
+            dialog.getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_STATE_VISIBLE);
+        }
+
+        saveBtn.setOnClickListener(v -> {
+            String name = schoolNameInput.getText().toString().trim();
+            String pin = pinInput.getText().toString().trim();
+
+            if (name.isEmpty() || pin.length() < 4) {
+                Toast.makeText(this, "Kripya School Name bharein aur 4-digit PIN banayein!", Toast.LENGTH_SHORT).show();
+                return;
+            }
+
+            Map<String, Object> setupData = new HashMap<>();
+            setupData.put("school_name", name);
+            setupData.put("recovery_pin", pin);
+            setupData.put("school_device_id", deviceId);
+
+            db.collection("users").document(username).update(setupData).addOnSuccessListener(aVoid -> {
+                Toast.makeText(this, "Account Activated Successfully!", Toast.LENGTH_SHORT).show();
+                dialog.dismiss();
+                handleSchoolLogin(username, doc.getString("password"), true);
+            });
+        });
+    }
+
+    // ==================== 2. MASTER RECOVERY DIALOG ====================
+    private void showMasterRecoveryDialog() {
+        ScrollView dialogScroll = new ScrollView(this);
+        LinearLayout layout = new LinearLayout(this);
+        layout.setOrientation(LinearLayout.VERTICAL);
+        layout.setPadding(40, 40, 40, 40);
+        dialogScroll.addView(layout);
+
+        RadioGroup recGroup = new RadioGroup(this);
+        recGroup.setOrientation(LinearLayout.HORIZONTAL);
+        recGroup.setGravity(Gravity.CENTER);
+        RadioButton rdoRecSchool = new RadioButton(this); rdoRecSchool.setText("School Recovery"); rdoRecSchool.setId(View.generateViewId());
+        RadioButton rdoRecAdmin = new RadioButton(this); rdoRecAdmin.setText("Admin Recovery"); rdoRecAdmin.setId(View.generateViewId());
+        recGroup.addView(rdoRecSchool); recGroup.addView(rdoRecAdmin);
+        layout.addView(recGroup);
+        rdoRecSchool.setChecked(true);
+
+        EditText schoolUserInput = new EditText(this);
+        schoolUserInput.setHint("Enter School Username");
+        layout.addView(schoolUserInput);
+
+        EditText pinInput = new EditText(this);
+        pinInput.setHint("Enter Secret Recovery PIN");
+        layout.addView(pinInput);
+
+        Button submitBtn = new Button(this);
+        submitBtn.setText("VERIFY & RESET DEVICE LOCK");
+        submitBtn.setBackgroundColor(Color.parseColor("#E65100"));
+        submitBtn.setTextColor(Color.WHITE);
+        layout.addView(submitBtn);
+
+        AlertDialog dialog = new AlertDialog.Builder(this).setTitle("Account Recovery System").setView(dialogScroll).show();
+
+        if (dialog.getWindow() != null) {
+            dialog.getWindow().clearFlags(WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_ALT_FOCUSABLE_IM);
+            dialog.getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_STATE_VISIBLE);
+        }
+
+        rdoRecAdmin.setOnClickListener(v -> schoolUserInput.setVisibility(View.GONE));
+        rdoRecSchool.setOnClickListener(v -> schoolUserInput.setVisibility(View.VISIBLE));
+
+        submitBtn.setOnClickListener(v -> {
+            String inputPin = pinInput.getText().toString().trim();
+            if(inputPin.isEmpty()) return;
+
+            if (recGroup.getCheckedRadioButtonId() == rdoRecAdmin.getId()) {
+                db.collection("system_settings").document("admin_data").get().addOnSuccessListener(doc -> {
+                    String savedPin = doc.contains("recovery_pin") ? doc.getString("recovery_pin") : "1999"; 
+                    if (inputPin.equals(savedPin)) {
+                        db.collection("system_settings").document("admin_data").update("admin_device_id", deviceId);
+                        sharedPreferences.edit().putBoolean("is_admin_device", true).apply();
+                        Toast.makeText(this, "Admin Account Recovered!", Toast.LENGTH_LONG).show();
+                        dialog.dismiss();
+                        isAdminMode = true;
+                        showAdminDashboard();
+                    } else {
+                        Toast.makeText(this, "Galat Admin PIN!", Toast.LENGTH_SHORT).show();
+                    }
+                });
+            } else {
+                String schoolUser = schoolUserInput.getText().toString().trim();
+                if(schoolUser.isEmpty()) {
+                    Toast.makeText(this, "School Username bharein!", Toast.LENGTH_SHORT).show();
+                    return;
+                }
+                db.collection("users").document(schoolUser).get().addOnSuccessListener(doc -> {
+                    if(doc.exists()) {
+                        if (!doc.contains("recovery_pin") || doc.getString("recovery_pin").isEmpty()) {
+                            Toast.makeText(this, "Is school ka recovery PIN set nahi hai. Admin se sampark karein.", Toast.LENGTH_LONG).show();
+                            return;
+                        }
+                        String savedPin = doc.getString("recovery_pin");
+                        if (inputPin.equals(savedPin)) {
+                            db.collection("users").document(schoolUser).update("school_device_id", deviceId);
+                            Toast.makeText(this, "School Device Lock Reset Successful!", Toast.LENGTH_LONG).show();
+                            dialog.dismiss();
+                            handleSchoolLogin(schoolUser, doc.getString("password"), false);
+                        } else {
+                            Toast.makeText(this, "Galat School Recovery PIN!", Toast.LENGTH_SHORT).show();
+                        }
+                    } else {
+                        Toast.makeText(this, "School Username nahi mila!", Toast.LENGTH_SHORT).show();
+                    }
+                });
+            }
+        });
+    }
+
+    // ==================== 3. ADMIN DASHBOARD ====================
     private void showAdminDashboard() {
         mainLayout.removeAllViews();
         mainLayout.setPadding(30, 30, 30, 30);
@@ -245,10 +430,24 @@ public class MainActivity extends AppCompatActivity {
         linkSchoolBox.setLayoutParams(fullWidthParams);
         mainLayout.addView(linkSchoolBox);
 
+        Button logoutBtn = new Button(this);
+        logoutBtn.setText("LOGOUT ADMIN SESSION");
+        logoutBtn.setBackgroundColor(Color.parseColor("#D32F2F"));
+        logoutBtn.setTextColor(Color.WHITE);
+        logoutBtn.setLayoutParams(fullWidthParams);
+        mainLayout.addView(logoutBtn);
+
         loadAdminSystemLogs();
 
         manageSchoolBox.setOnClickListener(v -> showManageSchoolDialog());
         linkSchoolBox.setOnClickListener(v -> showLinkMultipleSchoolDialog());
+        
+        logoutBtn.setOnClickListener(v -> {
+            db.collection("system_settings").document("admin_data").update("admin_device_id", "");
+            sharedPreferences.edit().putBoolean("is_admin_device", false).apply();
+            isAdminMode = false;
+            showLoginScreen();
+        });
     }
 
     private void loadAdminSystemLogs() {
@@ -268,21 +467,20 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void showManageSchoolDialog() {
-        Toast.makeText(this, "Loading Schools...", Toast.LENGTH_SHORT).show();
-        db.collection("schools").get().addOnSuccessListener(docs -> {
+        Toast.makeText(this, "Loading users...", Toast.LENGTH_SHORT).show();
+        db.collection("users").get().addOnSuccessListener(docs -> {
             ArrayList<String> schoolList = new ArrayList<>();
             for (DocumentSnapshot d : docs) {
                 schoolList.add(d.getId());
             }
 
-            // ScrollView for Dialog
             ScrollView dialogScroll = new ScrollView(this);
             LinearLayout dialogLayout = new LinearLayout(this);
             dialogLayout.setOrientation(LinearLayout.VERTICAL);
             dialogLayout.setPadding(40, 40, 40, 40);
             dialogScroll.addView(dialogLayout);
 
-            TextView lbl = new TextView(this); lbl.setText("School Chunein:");
+            TextView lbl = new TextView(this); lbl.setText("School / User Chunein:");
             dialogLayout.addView(lbl);
 
             Spinner spinner = new Spinner(this);
@@ -307,7 +505,6 @@ public class MainActivity extends AppCompatActivity {
 
             AlertDialog dialog = new AlertDialog.Builder(this).setTitle("Manage School Plan").setView(dialogScroll).show();
 
-            // Force Keyboard to work in Dialog
             if (dialog.getWindow() != null) {
                 dialog.getWindow().clearFlags(WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_ALT_FOCUSABLE_IM);
                 dialog.getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_STATE_VISIBLE);
@@ -320,7 +517,7 @@ public class MainActivity extends AppCompatActivity {
                 String expD = expiryInput.getText().toString().trim();
 
                 if(limitVal.isEmpty() || startD.isEmpty() || expD.isEmpty()) {
-                    Toast.makeText(this, "Saari details bharein!", Toast.LENGTH_SHORT).show();
+                    Toast.makeText(this, "Details bharein!", Toast.LENGTH_SHORT).show();
                     return;
                 }
 
@@ -337,15 +534,15 @@ public class MainActivity extends AppCompatActivity {
                 }
                 updateData.put("used_sms", 0);
 
-                db.collection("schools").document(selectedSchool).update(updateData).addOnSuccessListener(aVoid -> {
-                    Toast.makeText(this, "Plan successfully update ho gaya!", Toast.LENGTH_LONG).show();
+                db.collection("users").document(selectedSchool).update(updateData).addOnSuccessListener(aVoid -> {
+                    Toast.makeText(this, "Plan updated successfully!", Toast.LENGTH_LONG).show();
                     dialog.dismiss();
                 });
             });
         });
     }
 
-    // ==================== 3. SCHOOL DASHBOARD ====================
+    // ==================== 4. SCHOOL DASHBOARD ====================
     private void showSchoolDashboard(DocumentSnapshot schoolData) {
         mainLayout.removeAllViews();
         mainLayout.setPadding(30, 30, 30, 30);
@@ -371,12 +568,20 @@ public class MainActivity extends AppCompatActivity {
         row2.addView(pendingSmsTxt); row2.addView(failedSmsTxt);
         mainLayout.addView(row1); mainLayout.addView(row2);
 
-        TextView linkSchoolBox = createBox("🔗 Link Multiple School / Switch Account", "#E65100");
         LinearLayout.LayoutParams fullWidthParams = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
-        fullWidthParams.setMargins(15, 20, 15, 20);
+        fullWidthParams.setMargins(15, 15, 15, 15);
+
+        TextView linkSchoolBox = createBox("🔗 Link Multiple School / Switch Account", "#E65100");
         linkSchoolBox.setLayoutParams(fullWidthParams);
         mainLayout.addView(linkSchoolBox);
+
+        Button logoutBtn = new Button(this);
+        logoutBtn.setText("LOGOUT CURRENT SCHOOL");
+        logoutBtn.setBackgroundColor(Color.parseColor("#D32F2F"));
+        logoutBtn.setTextColor(Color.WHITE);
+        logoutBtn.setLayoutParams(fullWidthParams);
+        mainLayout.addView(logoutBtn);
 
         loadSchoolDashboardData(schoolData);
 
@@ -385,6 +590,12 @@ public class MainActivity extends AppCompatActivity {
         pendingSmsTxt.setOnClickListener(v -> fetchAndShowList("pending", "Pending SMS"));
         failedSmsTxt.setOnClickListener(v -> fetchAndShowList("failed", "Failed SMS"));
         linkSchoolBox.setOnClickListener(v -> showLinkMultipleSchoolDialog());
+        
+        logoutBtn.setOnClickListener(v -> {
+            db.collection("users").document(loggedInSchool).update("school_device_id", "");
+            loggedInSchool = "";
+            showLoginScreen();
+        });
     }
 
     private void loadSchoolDashboardData(DocumentSnapshot doc) {
@@ -407,9 +618,8 @@ public class MainActivity extends AppCompatActivity {
         });
     }
 
-    // ==================== 4. MASTER ACCOUNT LINK / SWITCH DIALOG ====================
+    // ==================== 5. ACCOUNT LINK / SWITCH DIALOG ====================
     private void showLinkMultipleSchoolDialog() {
-        // ScrollView for Keyboard Issue
         ScrollView dialogScroll = new ScrollView(this);
         LinearLayout dialogLayout = new LinearLayout(this);
         dialogLayout.setOrientation(LinearLayout.VERTICAL);
@@ -433,7 +643,6 @@ public class MainActivity extends AppCompatActivity {
 
         AlertDialog dialog = new AlertDialog.Builder(this).setTitle("Account Switcher Control").setView(dialogScroll).show();
 
-        // Force Keyboard to work in Dialog
         if (dialog.getWindow() != null) {
             dialog.getWindow().clearFlags(WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_ALT_FOCUSABLE_IM);
             dialog.getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_STATE_VISIBLE);
@@ -483,7 +692,7 @@ public class MainActivity extends AppCompatActivity {
                     switchBtn.setOnClickListener(v -> {
                         String savedPass = sharedPreferences.getString("pass_" + schoolUser, "");
                         dialog.dismiss();
-                        handleSchoolLogin(schoolUser, savedPass, false);
+                        handleSchoolLogin(schoolUser, savedPass, false); 
                     });
                 }
                 row.addView(nameTv);
@@ -517,7 +726,7 @@ public class MainActivity extends AppCompatActivity {
                 Toast.makeText(this, "Details bharein!", Toast.LENGTH_SHORT).show();
                 return;
             }
-            db.collection("schools").document(u).get().addOnSuccessListener(doc -> {
+            db.collection("users").document(u).get().addOnSuccessListener(doc -> {
                 if (doc.exists() && p.equals(doc.getString("password"))) {
                     sharedPreferences.edit().putString("pass_" + u, p).apply();
                     String currentList = sharedPreferences.getString("linked_list", "");
@@ -525,7 +734,7 @@ public class MainActivity extends AppCompatActivity {
                         currentList = currentList.isEmpty() ? u : currentList + "," + u;
                         sharedPreferences.edit().putString("linked_list", currentList).apply();
                     }
-                    Toast.makeText(this, "Account link ho gaya!", Toast.LENGTH_SHORT).show();
+                    Toast.makeText(this, "Account linked successfully!", Toast.LENGTH_SHORT).show();
                     dialog.dismiss();
                     showLinkMultipleSchoolDialog();
                 } else {
@@ -555,7 +764,7 @@ public class MainActivity extends AppCompatActivity {
         return box;
     }
 
-    // ==================== 5. UTILS & DUAL SIM ====================
+    // ==================== 6. UTILS & DUAL SIM ====================
     private void showPlanDetails(DocumentSnapshot doc) {
         String info = "Total SMS: " + doc.get("total_sms") +
                       "\nPerday Limit: " + doc.get("perday_sms") +
