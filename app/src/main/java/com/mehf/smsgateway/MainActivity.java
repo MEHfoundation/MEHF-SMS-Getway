@@ -43,6 +43,7 @@ import com.google.firebase.firestore.DocumentChange;
 import com.google.firebase.firestore.DocumentSnapshot;
 import com.google.firebase.firestore.FieldValue;
 import com.google.firebase.firestore.FirebaseFirestore;
+import com.google.firebase.firestore.ListenerRegistration; // NAYA IMPORT
 import com.google.firebase.firestore.QueryDocumentSnapshot;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -68,6 +69,9 @@ public class MainActivity extends AppCompatActivity {
     private long currentTotalUsed = 0;
     private String currentActiveDate = "";
     private boolean limitToastShown = false;
+
+    // 🚨 FIREBASE LISTENER CONTROL VARIABLE 🚨
+    private ListenerRegistration autoSmsListener;
 
     // ==================== STATIC SMS RECEIVER ====================
     public static class SmsResultReceiver extends BroadcastReceiver {
@@ -332,7 +336,6 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void showFirstTimeSetupDialog(String username, DocumentSnapshot doc) {
-        // [Existing Setup Dialog Code Unchanged]
         ScrollView dialogScroll = new ScrollView(this);
         LinearLayout layout = new LinearLayout(this);
         layout.setOrientation(LinearLayout.VERTICAL);
@@ -379,7 +382,6 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void showMasterRecoveryDialog() {
-        // [Existing Recovery Dialog Code Unchanged]
         ScrollView dialogScroll = new ScrollView(this);
         LinearLayout layout = new LinearLayout(this);
         layout.setOrientation(LinearLayout.VERTICAL);
@@ -487,6 +489,13 @@ public class MainActivity extends AppCompatActivity {
             db.collection("system_settings").document("admin_data").update("admin_device_id", "");
             sharedPreferences.edit().putBoolean("is_admin_device", false).apply();
             sharedPreferences.edit().putBoolean("is_admin_active_session", false).apply(); // CLEAR AUTO LOGIN
+            
+            // Remove Listener on logout
+            if (autoSmsListener != null) {
+                autoSmsListener.remove();
+                autoSmsListener = null;
+            }
+
             isAdminMode = false; 
             loggedInSchool = ""; 
             showLoginScreen();
@@ -508,7 +517,6 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void showManageSchoolDialog() {
-        // [Existing Manage Dialog Unchanged]
         Toast.makeText(this, "Loading users...", Toast.LENGTH_SHORT).show();
         db.collection("users").get().addOnSuccessListener(docs -> {
             ArrayList<String> schoolList = new ArrayList<>();
@@ -626,6 +634,13 @@ public class MainActivity extends AppCompatActivity {
         logoutBtn.setOnClickListener(v -> {
             db.collection("users").document(loggedInSchool).update("school_device_id", "");
             sharedPreferences.edit().putString("last_active_school", "").apply(); // CLEAR AUTO LOGIN
+            
+            // Remove listener on logout
+            if (autoSmsListener != null) {
+                autoSmsListener.remove();
+                autoSmsListener = null;
+            }
+
             loggedInSchool = ""; showLoginScreen();
         });
     }
@@ -638,8 +653,13 @@ public class MainActivity extends AppCompatActivity {
         return true;
     }
 
+    // 🚨 [UPDATE] SMS SENDER LISTENER CONTROL 🚨
     private void startAutoSmsSender() {
-        db.collection("sms_logs")
+        if (autoSmsListener != null) {
+            autoSmsListener.remove(); // Pehle wala hatao taaki double event na aaye
+        }
+
+        autoSmsListener = db.collection("sms_logs")
           .whereEqualTo("school", loggedInSchool)
           .whereEqualTo("status", "pending")
           .addSnapshotListener((snapshots, e) -> {
@@ -647,18 +667,25 @@ public class MainActivity extends AppCompatActivity {
               
               for (DocumentChange dc : snapshots.getDocumentChanges()) {
                   if (dc.getType() == DocumentChange.Type.ADDED) {
-                      String phone = dc.getDocument().getString("phone");
-                      String msg = dc.getDocument().getString("msg");
-                      String docId = dc.getDocument().getId();
-                      
-                      if (phone != null && msg != null && !phone.isEmpty()) {
-                          if (canSendMoreSms()) {
-                              limitToastShown = false; 
-                              sendSmsWithDualSim(phone, msg, docId);
-                          } else {
-                              if (!limitToastShown) {
-                                  Toast.makeText(MainActivity.this, "Daily SMS Limit Reached! Baki SMS pending me rakhe gaye hain jo kal jayenge.", Toast.LENGTH_LONG).show();
-                                  limitToastShown = true;
+                      String status = dc.getDocument().getString("status");
+                      if ("pending".equals(status)) { 
+                          String phone = dc.getDocument().getString("phone");
+                          String msg = dc.getDocument().getString("msg");
+                          String docId = dc.getDocument().getId();
+                          
+                          if (phone != null && msg != null && !phone.isEmpty()) {
+                              if (canSendMoreSms()) {
+                                  // 🚨 UPDATE TO 'processing' BEFORE SENDING TO AVOID RE-TRIGGER 🚨
+                                  db.collection("sms_logs").document(docId).update("status", "processing")
+                                    .addOnSuccessListener(aVoid -> {
+                                        limitToastShown = false; 
+                                        sendSmsWithDualSim(phone, msg, docId);
+                                    });
+                              } else {
+                                  if (!limitToastShown) {
+                                      Toast.makeText(MainActivity.this, "Daily SMS Limit Reached! Baki SMS pending me rakhe gaye hain jo kal jayenge.", Toast.LENGTH_LONG).show();
+                                      limitToastShown = true;
+                                  }
                               }
                           }
                       }
@@ -775,7 +802,6 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void fetchAndShowList(String status, String title) {
-        // [Existing List Dialog Code Unchanged]
         db.collection("sms_logs").whereEqualTo("school", loggedInSchool).whereEqualTo("status", status)
           .get().addOnSuccessListener(docs -> {
               LinearLayout listLayout = new LinearLayout(this); listLayout.setOrientation(LinearLayout.VERTICAL); listLayout.setPadding(20, 20, 20, 20);
@@ -842,7 +868,7 @@ public class MainActivity extends AppCompatActivity {
         
         ArrayList<String> parts = smsManager.divideMessage(msg);
         ArrayList<PendingIntent> sentIntents = new ArrayList<>();
-        ArrayList<PendingIntent> deliveryIntents = new ArrayList<>(); // Ise bhi zaroor bhejein, bhale hi null ho
+        ArrayList<PendingIntent> deliveryIntents = new ArrayList<>(); // Ise bhi zaroor bhejein
 
         for (int i = 0; i < parts.size(); i++) {
             // Aakhri part ke liye Intent lagayein
@@ -851,7 +877,7 @@ public class MainActivity extends AppCompatActivity {
             } else {
                 sentIntents.add(null);
             }
-            deliveryIntents.add(null); // Delivery intent ke liye null
+            deliveryIntents.add(null); 
         }
 
         smsManager.sendMultipartTextMessage(phone, null, parts, sentIntents, deliveryIntents);
