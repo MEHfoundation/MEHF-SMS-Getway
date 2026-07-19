@@ -2,9 +2,18 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="com.mehf.smsgateway">
 
+    <!-- Aapki purani permissions -->
     <uses-permission android:name="android.permission.SEND_SMS" />
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.READ_PHONE_STATE" />
+
+    <!-- Nayi Permissions Background Service aur App ko zinda rakhne ke liye -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+    
+    <!-- Android 13+ mein foreground service ki notification dikhane ke liye -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <application
         android:allowBackup="true"
@@ -21,7 +30,13 @@
             </intent-filter>
         </activity>
 
-        <!-- नया रिसीवर यहाँ जोड़ा गया है -->
+        <!-- Naya: Background mein chalne wali Foreground Service -->
+        <service
+            android:name=".SmsBackgroundService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
+
+        <!-- Aapka purana receiver (Dhyan rakhein ki MainActivity mein SmsResultReceiver ek 'public static' class honi chahiye) -->
         <receiver 
             android:name=".MainActivity$SmsResultReceiver" 
             android:exported="true">
