@@ -805,58 +805,62 @@ public class MainActivity extends AppCompatActivity {
     }
 
    // ==================== 🚨 [UPDATE] SMS DELIVERY ENGINE 🚨 ====================
-    private void sendSmsWithDualSim(String phone, String msg, String docId) {
-        Intent intent = new Intent(this, SmsResultReceiver.class);
-        intent.setAction("SMS_SENT_ACTION");
-        intent.putExtra("docId", docId);
-        intent.putExtra("schoolId", loggedInSchool);
-        intent.putExtra("isAdmin", isAdminMode);
-        
-        PendingIntent sentPI = PendingIntent.getBroadcast(this, docId.hashCode(), intent, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
+   private void sendSmsWithDualSim(String phone, String msg, String docId) {
+    Intent intent = new Intent(this, SmsResultReceiver.class);
+    intent.setAction("SMS_SENT_ACTION");
+    intent.putExtra("docId", docId);
+    intent.putExtra("schoolId", loggedInSchool);
+    intent.putExtra("isAdmin", isAdminMode);
+    
+    // FLAG_ONE_SHOT use karein taaki intent sirf ek baar fire ho
+    PendingIntent sentPI = PendingIntent.getBroadcast(
+            this, 
+            docId.hashCode(), // Unique ID based on Document ID
+            intent, 
+            PendingIntent.FLAG_ONE_SHOT | PendingIntent.FLAG_IMMUTABLE // (Android 12+ ke liye)
+    );
 
-        try {
-            SmsManager smsManager;
-            
-            // 🚨 READ SAVED SIM PREFERENCE FOR THIS SCHOOL 🚨
-            int savedSimId = sharedPreferences.getInt("sim_" + loggedInSchool, -1);
+    try {
+        SmsManager smsManager;
+        int savedSimId = sharedPreferences.getInt("sim_" + loggedInSchool, -1);
 
-            if (savedSimId != -1 && ActivityCompat.checkSelfPermission(this, Manifest.permission.READ_PHONE_STATE) == PackageManager.PERMISSION_GRANTED) {
-                // User ne specially koi SIM chuna tha login ke waqt
-                smsManager = SmsManager.getSmsManagerForSubscriptionId(savedSimId);
-            } else {
-                // Default System Logic (Agar SIM na chuna ho)
-                SubscriptionManager subManager = SubscriptionManager.from(this);
-                if (ActivityCompat.checkSelfPermission(this, Manifest.permission.READ_PHONE_STATE) == PackageManager.PERMISSION_GRANTED) {
-                    List<SubscriptionInfo> simInfoList = subManager.getActiveSubscriptionInfoList();
-                    if (simInfoList != null && simInfoList.size() > 0) {
-                        smsManager = SmsManager.getSmsManagerForSubscriptionId(simInfoList.get(0).getSubscriptionId());
-                    } else {
-                        smsManager = SmsManager.getDefault();
-                    }
+        if (savedSimId != -1 && ActivityCompat.checkSelfPermission(this, Manifest.permission.READ_PHONE_STATE) == PackageManager.PERMISSION_GRANTED) {
+            smsManager = SmsManager.getSmsManagerForSubscriptionId(savedSimId);
+        } else {
+            SubscriptionManager subManager = SubscriptionManager.from(this);
+            if (ActivityCompat.checkSelfPermission(this, Manifest.permission.READ_PHONE_STATE) == PackageManager.PERMISSION_GRANTED) {
+                List<SubscriptionInfo> simInfoList = subManager.getActiveSubscriptionInfoList();
+                if (simInfoList != null && simInfoList.size() > 0) {
+                    smsManager = SmsManager.getSmsManagerForSubscriptionId(simInfoList.get(0).getSubscriptionId());
                 } else {
                     smsManager = SmsManager.getDefault();
                 }
+            } else {
+                smsManager = SmsManager.getDefault();
             }
-            
-            ArrayList<String> parts = smsManager.divideMessage(msg);
-            ArrayList<PendingIntent> sentIntents = new ArrayList<>();
-            
-            for (int i = 0; i < parts.size(); i++) {
-                if (i == parts.size() - 1) {
-                    sentIntents.add(sentPI); 
-                } else {
-                    sentIntents.add(null);
-                }
-            }
-
-            smsManager.sendMultipartTextMessage(phone, null, parts, sentIntents, null);
-            
-        } catch (Exception ex) {
-            Toast.makeText(this, "Send Error: " + ex.getMessage(), Toast.LENGTH_LONG).show();
-            db.collection("sms_logs").document(docId).update("status", "failed");
         }
-    }
+        
+        ArrayList<String> parts = smsManager.divideMessage(msg);
+        ArrayList<PendingIntent> sentIntents = new ArrayList<>();
+        ArrayList<PendingIntent> deliveryIntents = new ArrayList<>(); // Ise bhi zaroor bhejein, bhale hi null ho
 
+        for (int i = 0; i < parts.size(); i++) {
+            // Aakhri part ke liye Intent lagayein
+            if (i == parts.size() - 1) {
+                sentIntents.add(sentPI); 
+            } else {
+                sentIntents.add(null);
+            }
+            deliveryIntents.add(null); // Delivery intent ke liye null
+        }
+
+        smsManager.sendMultipartTextMessage(phone, null, parts, sentIntents, deliveryIntents);
+        
+    } catch (Exception ex) {
+        Toast.makeText(this, "Send Error: " + ex.getMessage(), Toast.LENGTH_LONG).show();
+        db.collection("sms_logs").document(docId).update("status", "failed");
+    }
+}
     private void showAlert(String title, String msg) {
         new AlertDialog.Builder(this).setTitle(title).setMessage(msg).setPositiveButton("OK", null).show();
     }
