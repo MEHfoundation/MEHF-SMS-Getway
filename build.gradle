@@ -6,7 +6,6 @@ buildscript {
     dependencies {
         classpath 'com.android.tools.build:gradle:8.2.0'
         classpath 'com.google.gms:google-services:4.4.0'
-        // Naya: OneSignal Plugin for Notification
-        classpath 'gradle.plugin.com.onesignal:onesignal-gradle-plugin:[0.14.3, 0.99.99]'
+        // OneSignal classpath yahan se hata diya gaya hai taaki error na aaye
     }
 }
