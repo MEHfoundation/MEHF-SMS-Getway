@@ -24,31 +24,36 @@
             android:textSize="18sp"
             android:textStyle="bold" />
 
-        <ImageButton
+        <!-- ZegoCloud Voice & Video Call Buttons -->
+        <com.zegocloud.uikit.prebuilt.call.invite.widget.ZegoSendCallInvitationButton
             android:id="@+id/btnVoiceCall"
             android:layout_width="40dp"
             android:layout_height="40dp"
-            android:background="?attr/selectableItemBackground"
-            android:src="@android:drawable/ic_btn_speak_now"
-            android:tint="#FFFFFF" />
+            android:layout_marginRight="10dp"
+            android:background="?attr/selectableItemBackground" />
 
-        <ImageButton
+        <com.zegocloud.uikit.prebuilt.call.invite.widget.ZegoSendCallInvitationButton
             android:id="@+id/btnVideoCall"
             android:layout_width="40dp"
             android:layout_height="40dp"
-            android:background="?attr/selectableItemBackground"
-            android:src="@android:drawable/ic_menu_camera"
-            android:tint="#FFFFFF" />
+            android:background="?attr/selectableItemBackground" />
     </LinearLayout>
 
-    <!-- Chat Messages List -->
-    <androidx.recyclerview.widget.RecyclerView
-        android:id="@+id/chatRecyclerView"
+    <!-- Chat Messages Area -->
+    <ScrollView
+        android:id="@+id/chatScrollView"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:layout_above="@id/inputLayout"
         android:layout_below="@id/headerLayout"
-        android:padding="10dp" />
+        android:padding="10dp">
+        
+        <LinearLayout
+            android:id="@+id/chatListLayout"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical" />
+    </ScrollView>
 
     <!-- Type Message Box -->
     <LinearLayout
