@@ -67,10 +67,10 @@ public class ChatActivity extends AppCompatActivity {
     private SurfaceTextureHelper surfaceTextureHelper;
     private VideoCapturer videoCapturer;
 
-    // Users (Testing IDs - Isko baad mein real login se jodein)
-    private String currentUserDocId = "AppUser_" + System.currentTimeMillis(); 
-    private String currentUserName = "App Admin";
-    private String targetUserId = "WebUser123"; 
+    // Users (Dynamic Variables)
+    private String currentUserDocId = ""; 
+    private String currentUserName = "";
+    private String targetUserId = ""; 
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -91,6 +91,19 @@ public class ChatActivity extends AppCompatActivity {
         localVideoView = findViewById(R.id.localVideoView);
         remoteVideoView = findViewById(R.id.remoteVideoView);
 
+        // 0. Get Logged In User & Target User Data from Intent
+        com.google.firebase.auth.FirebaseUser user = com.google.firebase.auth.FirebaseAuth.getInstance().getCurrentUser();
+        if (user != null && user.getEmail() != null) {
+            currentUserDocId = user.getEmail().split("@")[0]; // Email se ID nikal li
+            currentUserName = currentUserDocId;
+        }
+
+        targetUserId = getIntent().getStringExtra("targetUserId");
+        String targetName = getIntent().getStringExtra("targetUserName");
+        
+        if (targetUserId == null) targetUserId = "Unknown";
+        setTitle("Chat: " + (targetName != null ? targetName : targetUserId));
+
         // 1. Text Chat Functions
         btnSend.setOnClickListener(v -> {
             String text = etMessage.getText().toString().trim();
@@ -104,9 +117,16 @@ public class ChatActivity extends AppCompatActivity {
         // 2. WebRTC Initialization
         initWebRTC();
 
-        // 3. Call Buttons
-        btnVideoCall.setOnClickListener(v -> startCall(true));
-        btnVoiceCall.setOnClickListener(v -> startCall(false));
+        // 3. Call Buttons Logic (Hide for AI & Groups)
+        if (targetUserId.equals("AI") || targetUserId.startsWith("group_")) {
+            btnVideoCall.setVisibility(View.GONE);
+            btnVoiceCall.setVisibility(View.GONE);
+        } else {
+            btnVideoCall.setVisibility(View.VISIBLE);
+            btnVoiceCall.setVisibility(View.VISIBLE);
+            btnVideoCall.setOnClickListener(v -> startCall(true));
+            btnVoiceCall.setOnClickListener(v -> startCall(false));
+        }
         
         btnEndCall.setOnClickListener(v -> {
             endCall();
@@ -137,7 +157,15 @@ public class ChatActivity extends AppCompatActivity {
                   if (dc.getType() == DocumentChange.Type.ADDED) {
                       String msg = dc.getDocument().getString("message");
                       String senderId = dc.getDocument().getString("senderId");
-                      displayMessageOnScreen(msg, currentUserDocId.equals(senderId));
+                      String receiverId = dc.getDocument().getString("receiverId");
+                      
+                      // Sirf wahi message dikhayein jo is user aur target ke beech hain (ya broadcast hain)
+                      if ((senderId.equals(currentUserDocId) && receiverId.equals(targetUserId)) || 
+                          (senderId.equals(targetUserId) && receiverId.equals(currentUserDocId)) ||
+                          (receiverId.equals(targetUserId) && targetUserId.startsWith("group_"))) {
+                          
+                          displayMessageOnScreen(msg, currentUserDocId.equals(senderId));
+                      }
                   }
               }
           });
