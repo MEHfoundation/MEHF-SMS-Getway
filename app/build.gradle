@@ -1,26 +1,28 @@
 plugins {
     id 'com.android.application'
     id 'com.google.gms.google-services'
+    id 'com.onesignal.androidsdk.onesignal-gradle-plugin' // Naya
 }
 
 android {
     namespace 'com.mehf.smsgateway'
     compileSdk 34
-
-    defaultConfig {
-        applicationId "com.mehf.smsgateway"
-        minSdk 21
-        targetSdk 34
-        versionCode 1
-        versionName "1.0"
-    }
+    // ... baki setting waise hi rehne dein
 }
 
 dependencies {
+    // Purani basic libraries
     implementation 'androidx.appcompat:appcompat:1.6.1'
     implementation 'com.google.android.material:material:1.11.0'
-    
-    // Firebase
-    implementation platform('com.google.firebase:firebase-bom:32.7.1')
+
+    // Firebase - Chat & Database 
+    implementation platform('com.google.firebase:firebase-bom:32.7.0')
     implementation 'com.google.firebase:firebase-firestore'
+    implementation 'com.google.firebase:firebase-messaging'
+
+    // OneSignal Notification
+    implementation 'com.onesignal:OneSignal:[5.0.0, 5.99.99]'
+
+    // ZegoCloud - WebRTC Voice & Video Call SDK
+    implementation 'com.github.ZEGOCLOUD:zego_uikit_prebuilt_call_android:+'
 }
