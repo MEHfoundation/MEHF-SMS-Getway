@@ -50,12 +50,10 @@ public class ChatAdapter extends RecyclerView.Adapter<ChatAdapter.ChatViewHolder
         shape.setCornerRadius(20);
 
         if (message.getSenderId() != null && message.getSenderId().equals(currentUserId)) {
-            // Apna message (Right side - Green)
             params.gravity = Gravity.END;
             shape.setColor(Color.parseColor("#DCF8C6"));
             holder.textView.setTextColor(Color.BLACK);
         } else {
-            // Samne wale ka message (Left side - White)
             params.gravity = Gravity.START;
             shape.setColor(Color.WHITE);
             holder.textView.setTextColor(Color.BLACK);
