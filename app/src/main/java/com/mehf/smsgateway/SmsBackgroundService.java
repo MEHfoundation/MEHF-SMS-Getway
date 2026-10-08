@@ -29,9 +29,9 @@ public class SmsBackgroundService extends Service {
             }
 
             Notification notification = new NotificationCompat.Builder(this, channelId)
-                    .setContentTitle("MEHF SMS Gateway Active")
-                    .setContentText("App background me chal raha hai aur SMS bhej raha hai.")
-                    .setSmallIcon(android.R.drawable.ic_dialog_email) // Aap yahan apna app icon bhi laga sakte hain
+                    .setContentTitle("MEHF Communication Hub Active")
+                    .setContentText("App background mein active hai.")
+                    .setSmallIcon(android.R.drawable.ic_dialog_email)
                     .build();
 
             startForeground(1, notification);
@@ -40,8 +40,6 @@ public class SmsBackgroundService extends Service {
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
-        // START_STICKY ye ensure karega ki agar Android system is app ko kill 
-        // bhi kar de memory kam hone par, toh ye khud wapas chalu ho jayega.
         return START_STICKY; 
     }
 
