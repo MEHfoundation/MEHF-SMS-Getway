@@ -64,7 +64,6 @@ public class MainActivity extends AppCompatActivity {
 
     private TextView remainingSmsTxt, sentSmsTxt, pendingSmsTxt, failedSmsTxt;
 
-    // Daily Limit & Rollover Variables
     private long currentDailyUsed = 0;
     private long currentPerdayLimit = 0;
     private boolean isUnlimitedPlan = false;
@@ -73,10 +72,8 @@ public class MainActivity extends AppCompatActivity {
     private String currentActiveDate = "";
     private boolean limitToastShown = false;
 
-    // FIREBASE LISTENER CONTROL VARIABLE
     private ListenerRegistration autoSmsListener;
 
-    // ==================== STATIC SMS RECEIVER ====================
     public static class SmsResultReceiver extends BroadcastReceiver {
         @Override
         public void onReceive(Context context, Intent intent) {
@@ -162,7 +159,6 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    // ==================== AUTO-LOGIN & ROLE CHECK ====================
     private void checkAutoLogin() {
         FirebaseUser currentUser = mAuth.getCurrentUser();
         boolean isMasterAdmin = sharedPreferences.getBoolean("is_admin_active_session", false);
@@ -250,17 +246,10 @@ public class MainActivity extends AppCompatActivity {
         loginBtn.setLayoutParams(btnParams);
         mainLayout.addView(loginBtn);
 
-        Button recoverBtn = new Button(this);
-        recoverBtn.setText("Recover Account (Admin / School)");
-        recoverBtn.setBackgroundColor(Color.TRANSPARENT);
-        recoverBtn.setTextColor(Color.parseColor("#757575"));
-        mainLayout.addView(recoverBtn);
-
         roleGroup.setOnCheckedChangeListener((group, checkedId) -> {
             int visibility = (checkedId == rdoUser.getId()) ? View.GONE : View.VISIBLE;
             simLabel.setVisibility(visibility);
             simSpinner.setVisibility(visibility);
-            recoverBtn.setVisibility(visibility);
         });
 
         loginBtn.setOnClickListener(v -> {
@@ -281,8 +270,6 @@ public class MainActivity extends AppCompatActivity {
                 handleSchoolLogin(user, pass, true, selectedSimId);
             }
         });
-
-        recoverBtn.setOnClickListener(v -> showMasterRecoveryDialog());
     }
 
     // ==================== 2. ROLE BASED HANDLERS ====================
@@ -318,8 +305,7 @@ public class MainActivity extends AppCompatActivity {
                         if (deviceId.equals(savedId)) {
                             saveAdminSession();
                         } else {
-                            showAlert("Notice", "Admin is already logged in on another device. Please use Admin Recovery.");
-                            mAuth.signOut(); 
+                            showAdminUnlockDialog(); // SMART UNLOCK CALLED HERE
                         }
                     } else {
                         db.collection("system_settings").document("admin_data").update("admin_device_id", deviceId);
@@ -340,7 +326,6 @@ public class MainActivity extends AppCompatActivity {
         showAdminDashboard();
     }
 
-    // 🔥 SMART SEARCH PROFILE HANDLER 🔥
     private void handleSchoolLogin(String originalInput, String password, boolean checkDeviceLock, int simSubId) {
         if(originalInput.isEmpty() || password.isEmpty()){
             Toast.makeText(this, "Username aur Password bharein!", Toast.LENGTH_SHORT).show();
@@ -354,16 +339,14 @@ public class MainActivity extends AppCompatActivity {
             if (task.isSuccessful()) {
                 String docIdToSearch = originalInput;
                 if (originalInput.contains("@")) {
-                    docIdToSearch = originalInput.split("@")[0]; // email se pehle ka hissa
+                    docIdToSearch = originalInput.split("@")[0]; 
                 }
                 final String finalDocId = docIdToSearch;
                 
-                // 1. Direct naam ya email prefix se check karte hain
                 db.collection("users").document(finalDocId).get().addOnCompleteListener(docTask -> {
                     if (docTask.isSuccessful() && docTask.getResult().exists()) {
                         processValidProfile(docTask.getResult(), finalDocId, originalInput, password, checkDeviceLock, simSubId);
                     } else {
-                        // 2. Agar nahi mila, toh UID se check karte hain (Auth Migration Logic)
                         String uid = mAuth.getCurrentUser().getUid();
                         db.collection("users").document(uid).get().addOnCompleteListener(uidTask -> {
                             if (uidTask.isSuccessful() && uidTask.getResult().exists()) {
@@ -386,11 +369,12 @@ public class MainActivity extends AppCompatActivity {
             showFirstTimeSetupDialog(originalInput, docId, password, doc);
             return;
         }
+        
         if (checkDeviceLock && doc.contains("school_device_id") && !doc.getString("school_device_id").isEmpty()) {
             String activeDeviceId = doc.getString("school_device_id");
             if (!deviceId.equals(activeDeviceId)) {
-                showAlert("Device Locked", "This school is already active on another device.");
-                mAuth.signOut();
+                // SMART UNLOCK CALLED HERE INSTED OF LOGGING OUT
+                showUnlockDeviceDialog(docId, doc.getString("recovery_pin"), originalInput, password, simSubId);
                 return;
             }
         }
@@ -413,6 +397,154 @@ public class MainActivity extends AppCompatActivity {
             sharedPreferences.edit().putString("linked_list", linked).apply();
         }
         showSchoolDashboard(doc);
+    }
+
+    // ==================== SMART UNLOCK DIALOGS (NEW) ====================
+    private void showUnlockDeviceDialog(String docId, String savedPin, String originalInput, String password, int simSubId) {
+        ScrollView dialogScroll = new ScrollView(this);
+        LinearLayout layout = new LinearLayout(this);
+        layout.setOrientation(LinearLayout.VERTICAL);
+        layout.setPadding(40, 40, 40, 40);
+        dialogScroll.addView(layout);
+
+        TextView alertTitle = new TextView(this); 
+        alertTitle.setText("🔒 Device Locked!");
+        alertTitle.setTextSize(18f); alertTitle.setTextColor(Color.RED); alertTitle.setPadding(0, 0, 0, 10);
+        layout.addView(alertTitle);
+
+        TextView msg = new TextView(this);
+        msg.setText("Yeh account pehle se dusre phone par active hai. Is phone me chalane ke liye apna 4-digit PIN dalein:");
+        msg.setTextColor(Color.BLACK);
+        msg.setPadding(0, 0, 0, 20);
+        layout.addView(msg);
+
+        EditText pinInput = new EditText(this); 
+        pinInput.setHint("Enter 4-Digit Secret PIN"); 
+        layout.addView(pinInput);
+
+        Button submitBtn = new Button(this); 
+        submitBtn.setText("UNLOCK & LOGIN");
+        submitBtn.setBackgroundColor(Color.parseColor("#E65100")); 
+        submitBtn.setTextColor(Color.WHITE); 
+        LinearLayout.LayoutParams btnParams = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        btnParams.setMargins(0, 20, 0, 10);
+        submitBtn.setLayoutParams(btnParams);
+        layout.addView(submitBtn);
+
+        Button cancelBtn = new Button(this);
+        cancelBtn.setText("CANCEL");
+        cancelBtn.setBackgroundColor(Color.TRANSPARENT);
+        cancelBtn.setTextColor(Color.GRAY);
+        layout.addView(cancelBtn);
+
+        AlertDialog dialog = new AlertDialog.Builder(this).setView(dialogScroll).setCancelable(false).show();
+
+        if (dialog.getWindow() != null) {
+            dialog.getWindow().clearFlags(WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_ALT_FOCUSABLE_IM);
+            dialog.getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_STATE_VISIBLE);
+        }
+
+        submitBtn.setOnClickListener(v -> {
+            String inputPin = pinInput.getText().toString().trim();
+            if (inputPin.isEmpty()) return;
+
+            if (inputPin.equals(savedPin)) {
+                db.collection("users").document(docId).update("school_device_id", deviceId)
+                    .addOnSuccessListener(aVoid -> {
+                        Toast.makeText(this, "Device Unlocked Successfully!", Toast.LENGTH_SHORT).show();
+                        dialog.dismiss();
+                        
+                        sharedPreferences.edit().putString("pass_" + originalInput, password).apply();
+                        sharedPreferences.edit().putString("last_active_school", originalInput).apply();
+                        sharedPreferences.edit().putBoolean("is_admin_active_session", false).apply();
+                        sharedPreferences.edit().putBoolean("is_connect_user", false).apply();
+                        if (simSubId != -1) {
+                            sharedPreferences.edit().putInt("sim_" + originalInput, simSubId).apply(); 
+                        }
+
+                        String linked = sharedPreferences.getString("linked_list", "");
+                        if (!linked.contains(originalInput)) {
+                            linked = linked.isEmpty() ? originalInput : linked + "," + originalInput;
+                            sharedPreferences.edit().putString("linked_list", linked).apply();
+                        }
+                        
+                        loggedInSchool = docId;
+                        isAdminMode = false;
+                        
+                        db.collection("users").document(docId).get().addOnSuccessListener(MainActivity.this::showSchoolDashboard);
+                    })
+                    .addOnFailureListener(e -> {
+                        Toast.makeText(this, "Unlock Failed: " + e.getMessage(), Toast.LENGTH_LONG).show();
+                    });
+            } else {
+                Toast.makeText(this, "Galat PIN!", Toast.LENGTH_SHORT).show();
+            }
+        });
+
+        cancelBtn.setOnClickListener(v -> {
+            mAuth.signOut();
+            dialog.dismiss();
+        });
+    }
+
+    private void showAdminUnlockDialog() {
+        ScrollView dialogScroll = new ScrollView(this);
+        LinearLayout layout = new LinearLayout(this);
+        layout.setOrientation(LinearLayout.VERTICAL);
+        layout.setPadding(40, 40, 40, 40);
+        dialogScroll.addView(layout);
+
+        TextView alertTitle = new TextView(this); 
+        alertTitle.setText("⭐ Admin Device Locked!");
+        alertTitle.setTextSize(18f); alertTitle.setTextColor(Color.RED); alertTitle.setPadding(0, 0, 0, 10);
+        layout.addView(alertTitle);
+
+        EditText pinInput = new EditText(this); 
+        pinInput.setHint("Enter Admin Recovery PIN"); 
+        layout.addView(pinInput);
+
+        Button submitBtn = new Button(this); 
+        submitBtn.setText("UNLOCK ADMIN");
+        submitBtn.setBackgroundColor(Color.parseColor("#E65100")); 
+        submitBtn.setTextColor(Color.WHITE); 
+        LinearLayout.LayoutParams btnParams = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        btnParams.setMargins(0, 20, 0, 10);
+        submitBtn.setLayoutParams(btnParams);
+        layout.addView(submitBtn);
+
+        Button cancelBtn = new Button(this);
+        cancelBtn.setText("CANCEL");
+        cancelBtn.setBackgroundColor(Color.TRANSPARENT);
+        cancelBtn.setTextColor(Color.GRAY);
+        layout.addView(cancelBtn);
+
+        AlertDialog dialog = new AlertDialog.Builder(this).setView(dialogScroll).setCancelable(false).show();
+
+        submitBtn.setOnClickListener(v -> {
+            String inputPin = pinInput.getText().toString().trim();
+            if (inputPin.isEmpty()) return;
+
+            db.collection("system_settings").document("admin_data").get().addOnSuccessListener(doc -> {
+                String savedPin = doc.contains("recovery_pin") ? doc.getString("recovery_pin") : "1999"; 
+                if (inputPin.equals(savedPin)) {
+                    db.collection("system_settings").document("admin_data").update("admin_device_id", deviceId)
+                        .addOnSuccessListener(aVoid -> {
+                            Toast.makeText(this, "Admin Unlocked!", Toast.LENGTH_SHORT).show();
+                            dialog.dismiss();
+                            saveAdminSession();
+                        });
+                } else { 
+                    Toast.makeText(this, "Galat Admin PIN!", Toast.LENGTH_SHORT).show(); 
+                }
+            });
+        });
+
+        cancelBtn.setOnClickListener(v -> {
+            mAuth.signOut();
+            dialog.dismiss();
+        });
     }
 
     private void showFirstTimeSetupDialog(String originalInput, String docId, String password, DocumentSnapshot doc) {
@@ -458,71 +590,6 @@ public class MainActivity extends AppCompatActivity {
                 dialog.dismiss();
                 handleSchoolLogin(originalInput, password, true, -1);
             });
-        });
-    }
-
-    private void showMasterRecoveryDialog() {
-        ScrollView dialogScroll = new ScrollView(this);
-        LinearLayout layout = new LinearLayout(this);
-        layout.setOrientation(LinearLayout.VERTICAL);
-        layout.setPadding(40, 40, 40, 40);
-        dialogScroll.addView(layout);
-
-        RadioGroup recGroup = new RadioGroup(this); recGroup.setOrientation(LinearLayout.HORIZONTAL); recGroup.setGravity(Gravity.CENTER);
-        RadioButton rdoRecSchool = new RadioButton(this); rdoRecSchool.setText("School Recovery"); rdoRecSchool.setId(View.generateViewId());
-        RadioButton rdoRecAdmin = new RadioButton(this); rdoRecAdmin.setText("Admin Recovery"); rdoRecAdmin.setId(View.generateViewId());
-        recGroup.addView(rdoRecSchool); recGroup.addView(rdoRecAdmin); layout.addView(recGroup); rdoRecSchool.setChecked(true);
-
-        EditText schoolUserInput = new EditText(this); schoolUserInput.setHint("Enter School Username"); layout.addView(schoolUserInput);
-        EditText pinInput = new EditText(this); pinInput.setHint("Enter Secret Recovery PIN"); layout.addView(pinInput);
-
-        Button submitBtn = new Button(this); submitBtn.setText("VERIFY & RESET DEVICE LOCK");
-        submitBtn.setBackgroundColor(Color.parseColor("#E65100")); submitBtn.setTextColor(Color.WHITE); layout.addView(submitBtn);
-
-        AlertDialog dialog = new AlertDialog.Builder(this).setTitle("Account Recovery System").setView(dialogScroll).show();
-
-        if (dialog.getWindow() != null) {
-            dialog.getWindow().clearFlags(WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_ALT_FOCUSABLE_IM);
-            dialog.getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_STATE_VISIBLE);
-        }
-
-        rdoRecAdmin.setOnClickListener(v -> schoolUserInput.setVisibility(View.GONE));
-        rdoRecSchool.setOnClickListener(v -> schoolUserInput.setVisibility(View.VISIBLE));
-
-        submitBtn.setOnClickListener(v -> {
-            String inputPin = pinInput.getText().toString().trim();
-            if(inputPin.isEmpty()) return;
-
-            if (recGroup.getCheckedRadioButtonId() == rdoRecAdmin.getId()) {
-                db.collection("system_settings").document("admin_data").get().addOnSuccessListener(doc -> {
-                    String savedPin = doc.contains("recovery_pin") ? doc.getString("recovery_pin") : "1999"; 
-                    if (inputPin.equals(savedPin)) {
-                        db.collection("system_settings").document("admin_data").update("admin_device_id", deviceId);
-                        sharedPreferences.edit().putBoolean("is_admin_device", true).apply();
-                        Toast.makeText(this, "Admin Lock Reset! Now Login from main screen.", Toast.LENGTH_LONG).show();
-                        dialog.dismiss(); 
-                    } else { Toast.makeText(this, "Galat Admin PIN!", Toast.LENGTH_SHORT).show(); }
-                });
-            } else {
-                String schoolUser = schoolUserInput.getText().toString().trim();
-                if(schoolUser.isEmpty()) return;
-                
-                String docIdToSearch = schoolUser.contains("@") ? schoolUser.split("@")[0] : schoolUser;
-                db.collection("users").document(docIdToSearch).get().addOnSuccessListener(doc -> {
-                    if(doc.exists()) {
-                        if (!doc.contains("recovery_pin") || doc.getString("recovery_pin") == null || doc.getString("recovery_pin").isEmpty()) {
-                            Toast.makeText(this, "Is school ka recovery PIN set nahi hai.", Toast.LENGTH_LONG).show(); return;
-                        }
-                        if (inputPin.equals(doc.getString("recovery_pin"))) {
-                            db.collection("users").document(docIdToSearch).update("school_device_id", deviceId);
-                            Toast.makeText(this, "Lock Reset Successful! Now Login.", Toast.LENGTH_LONG).show();
-                            dialog.dismiss();
-                        } else { Toast.makeText(this, "Galat PIN!", Toast.LENGTH_SHORT).show(); }
-                    } else {
-                        Toast.makeText(this, "School Username nahi mila!", Toast.LENGTH_SHORT).show();
-                    }
-                });
-            }
         });
     }
 
@@ -638,7 +705,7 @@ public class MainActivity extends AppCompatActivity {
 
             submitBtn.setOnClickListener(v -> {
                 String selectedRaw = spinner.getSelectedItem().toString();
-                String selectedSchool = selectedRaw.split(" - ")[0]; // ID alag kar rahe hain
+                String selectedSchool = selectedRaw.split(" - ")[0]; 
                 
                 String limitVal = limitInput.getText().toString().trim();
                 String startD = startInput.getText().toString().trim();
