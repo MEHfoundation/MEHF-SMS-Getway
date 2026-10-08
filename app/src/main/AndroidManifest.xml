@@ -2,23 +2,25 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="com.mehf.smsgateway">
 
-    <!-- Aapki purani permissions -->
+    <!-- Aapki Purani SMS Gateway Permissions -->
     <uses-permission android:name="android.permission.SEND_SMS" />
-    <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.READ_PHONE_STATE" />
-
-    <!-- Nayi Permissions Background Service aur App ko zinda rakhne ke liye -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
     
-    <!-- Android 13+ mein foreground service ki notification dikhane ke liye -->
+    <!-- Nayi: Chat, Call aur Internet Permissions -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <application
         android:allowBackup="true"
         android:icon="@drawable/logo"
-        android:label="MEHF SMS Gateway"
+        android:label="MEHF Communication"
         android:theme="@style/Theme.AppCompat.Light.NoActionBar">
         
         <activity
@@ -30,13 +32,18 @@
             </intent-filter>
         </activity>
 
-        <!-- Naya: Background mein chalne wali Foreground Service -->
+        <!-- Naya: Chat Screen Activity (Jise hum agle step me banayenge) -->
+        <activity 
+            android:name=".ChatActivity" 
+            android:exported="false" />
+
+        <!-- Aapka Purana Background SMS Service -->
         <service
             android:name=".SmsBackgroundService"
             android:exported="false"
             android:foregroundServiceType="dataSync" />
 
-        <!-- Aapka purana receiver (Dhyan rakhein ki MainActivity mein SmsResultReceiver ek 'public static' class honi chahiye) -->
+        <!-- Aapka Purana Receiver -->
         <receiver 
             android:name=".MainActivity$SmsResultReceiver" 
             android:exported="true">
