@@ -287,7 +287,7 @@ public class MainActivity extends AppCompatActivity {
 
     // ==================== 2. ROLE BASED HANDLERS ====================
     private void handleConnectUserLogin(String user, String pass) {
-        String email = user.contains("@") ? user : user + "@mehf.app";
+        String email = user.contains("@") ? user : user + "@mehf.in";
         Toast.makeText(this, "Authenticating...", Toast.LENGTH_SHORT).show();
         mAuth.signInWithEmailAndPassword(email, pass).addOnCompleteListener(task -> {
             if (task.isSuccessful()) {
@@ -308,7 +308,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void handleAdminLogin(String user, String pass) {
-        String email = user.contains("@") ? user : user + "@mehf.app";
+        String email = user.contains("@") ? user : user + "@mehf.in";
         Toast.makeText(this, "Authenticating Admin...", Toast.LENGTH_SHORT).show();
         mAuth.signInWithEmailAndPassword(email, pass).addOnCompleteListener(task -> {
             if (task.isSuccessful()) {
@@ -347,7 +347,7 @@ public class MainActivity extends AppCompatActivity {
             return;
         }
         
-        String email = originalInput.contains("@") ? originalInput : originalInput + "@mehf.app";
+        String email = originalInput.contains("@") ? originalInput : originalInput + "@mehf.in";
         Toast.makeText(this, "Authenticating...", Toast.LENGTH_SHORT).show();
 
         mAuth.signInWithEmailAndPassword(email, password).addOnCompleteListener(task -> {
