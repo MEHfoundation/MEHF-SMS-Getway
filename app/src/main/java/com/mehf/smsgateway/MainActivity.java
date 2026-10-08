@@ -289,7 +289,8 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void openChatActivity() {
-        Intent intent = new Intent(MainActivity.this, ChatActivity.class);
+        // UPDATE: Connect Users ab sidhe UsersListActivity par jayenge
+        Intent intent = new Intent(MainActivity.this, UsersListActivity.class);
         startActivity(intent);
         finish(); 
     }
@@ -305,7 +306,7 @@ public class MainActivity extends AppCompatActivity {
                         if (deviceId.equals(savedId)) {
                             saveAdminSession();
                         } else {
-                            showAdminUnlockDialog(); // SMART UNLOCK CALLED HERE
+                            showAdminUnlockDialog(); 
                         }
                     } else {
                         db.collection("system_settings").document("admin_data").update("admin_device_id", deviceId);
@@ -373,7 +374,6 @@ public class MainActivity extends AppCompatActivity {
         if (checkDeviceLock && doc.contains("school_device_id") && !doc.getString("school_device_id").isEmpty()) {
             String activeDeviceId = doc.getString("school_device_id");
             if (!deviceId.equals(activeDeviceId)) {
-                // SMART UNLOCK CALLED HERE INSTED OF LOGGING OUT
                 showUnlockDeviceDialog(docId, doc.getString("recovery_pin"), originalInput, password, simSubId);
                 return;
             }
@@ -399,7 +399,7 @@ public class MainActivity extends AppCompatActivity {
         showSchoolDashboard(doc);
     }
 
-    // ==================== SMART UNLOCK DIALOGS (NEW) ====================
+    // ==================== SMART UNLOCK DIALOGS ====================
     private void showUnlockDeviceDialog(String docId, String savedPin, String originalInput, String password, int simSubId) {
         ScrollView dialogScroll = new ScrollView(this);
         LinearLayout layout = new LinearLayout(this);
@@ -626,8 +626,9 @@ public class MainActivity extends AppCompatActivity {
         chatHubBtn.setLayoutParams(fullWidthParams); 
         mainLayout.addView(chatHubBtn);
         
+        // UPDATE: Admin bhi ab UsersListActivity par jayega
         chatHubBtn.setOnClickListener(v -> {
-            Intent intent = new Intent(MainActivity.this, ChatActivity.class);
+            Intent intent = new Intent(MainActivity.this, UsersListActivity.class);
             startActivity(intent);
         });
 
@@ -761,8 +762,9 @@ public class MainActivity extends AppCompatActivity {
         chatHubBtn.setLayoutParams(fullWidthParams); 
         mainLayout.addView(chatHubBtn);
         
+        // UPDATE: School bhi ab UsersListActivity par jayega
         chatHubBtn.setOnClickListener(v -> {
-            Intent intent = new Intent(MainActivity.this, ChatActivity.class);
+            Intent intent = new Intent(MainActivity.this, UsersListActivity.class);
             startActivity(intent);
         });
 
