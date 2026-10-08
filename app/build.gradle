@@ -24,8 +24,18 @@ android {
         }
     }
     compileOptions {
-        sourceCompatibility JavaVersion.VERSION_1_8
-        targetCompatibility JavaVersion.VERSION_1_8
+        // Java version ko 17 par update kiya gaya hai
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}
+
+// Ye block purani WebRTC request ko nayi library par force redirect karega
+configurations.all {
+    resolutionStrategy.eachDependency { details ->
+        if (details.requested.group == 'org.webrtc' && details.requested.name == 'google-webrtc') {
+            details.useTarget 'io.getstream:stream-webrtc-android:1.1.1'
+        }
     }
 }
 
