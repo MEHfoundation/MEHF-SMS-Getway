@@ -42,5 +42,5 @@ dependencies {
     implementation 'com.onesignal:OneSignal:[5.0.0, 5.99.99]'
 
     // WebRTC
-    implementation 'org.webrtc:google-webrtc:1.0.32006'
+    implementation 'io.getstream:stream-webrtc-android:1.1.1'
 }
