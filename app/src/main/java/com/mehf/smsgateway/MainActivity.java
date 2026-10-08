@@ -43,7 +43,7 @@ import com.google.firebase.firestore.DocumentChange;
 import com.google.firebase.firestore.DocumentSnapshot;
 import com.google.firebase.firestore.FieldValue;
 import com.google.firebase.firestore.FirebaseFirestore;
-import com.google.firebase.firestore.ListenerRegistration; // NAYA IMPORT
+import com.google.firebase.firestore.ListenerRegistration; 
 import com.google.firebase.firestore.QueryDocumentSnapshot;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -169,7 +169,7 @@ public class MainActivity extends AppCompatActivity {
             showAdminDashboard();
         } else if (!lastSchool.isEmpty()) {
             String savedPass = sharedPreferences.getString("pass_" + lastSchool, "");
-            handleSchoolLogin(lastSchool, savedPass, false, -1); // Auto login bypasses UI
+            handleSchoolLogin(lastSchool, savedPass, false, -1); 
         } else {
             showLoginScreen();
         }
@@ -203,7 +203,6 @@ public class MainActivity extends AppCompatActivity {
         EditText passwordInput = new EditText(this); passwordInput.setHint("Password");
         mainLayout.addView(passwordInput);
 
-        // 🚨 [NEW] SIM SELECTION OPTION 🚨
         TextView simLabel = new TextView(this); simLabel.setText("\nSelect SIM for Sending SMS:");
         mainLayout.addView(simLabel);
         
@@ -244,7 +243,6 @@ public class MainActivity extends AppCompatActivity {
         recoverBtn.setTextColor(Color.parseColor("#757575"));
         mainLayout.addView(recoverBtn);
 
-        // Hide SIM option if Admin is selected
         roleGroup.setOnCheckedChangeListener((group, checkedId) -> {
             int visibility = (checkedId == rdoAdmin.getId()) ? View.GONE : View.VISIBLE;
             simLabel.setVisibility(visibility);
@@ -273,7 +271,7 @@ public class MainActivity extends AppCompatActivity {
                 String savedId = doc.getString("admin_device_id");
                 if (deviceId.equals(savedId)) {
                     sharedPreferences.edit().putBoolean("is_admin_device", true).apply();
-                    sharedPreferences.edit().putBoolean("is_admin_active_session", true).apply(); // NEW AUTO LOGIN FLAG
+                    sharedPreferences.edit().putBoolean("is_admin_active_session", true).apply(); 
                     isAdminMode = true;
                     showAdminDashboard();
                 } else {
@@ -282,7 +280,7 @@ public class MainActivity extends AppCompatActivity {
             } else {
                 db.collection("system_settings").document("admin_data").update("admin_device_id", deviceId);
                 sharedPreferences.edit().putBoolean("is_admin_device", true).apply();
-                sharedPreferences.edit().putBoolean("is_admin_active_session", true).apply(); // NEW AUTO LOGIN FLAG
+                sharedPreferences.edit().putBoolean("is_admin_active_session", true).apply(); 
                 isAdminMode = true;
                 showAdminDashboard();
             }
@@ -312,12 +310,11 @@ public class MainActivity extends AppCompatActivity {
                     loggedInSchool = username;
                     isAdminMode = false;
                     
-                    // 🚨 [NEW] AUTO LOGIN & SIM SAVING LOGIC 🚨
                     sharedPreferences.edit().putString("pass_" + username, password).apply();
                     sharedPreferences.edit().putString("last_active_school", username).apply();
                     sharedPreferences.edit().putBoolean("is_admin_active_session", false).apply();
                     if (simSubId != -1) {
-                        sharedPreferences.edit().putInt("sim_" + username, simSubId).apply(); // Save selected SIM for this school
+                        sharedPreferences.edit().putInt("sim_" + username, simSubId).apply(); 
                     }
 
                     String linked = sharedPreferences.getString("linked_list", "");
@@ -470,6 +467,20 @@ public class MainActivity extends AppCompatActivity {
         TextView manageSchoolBox = createBox("⚙️ Manage School Plan", "#6A1B9A"); manageSchoolBox.setLayoutParams(fullWidthParams); mainLayout.addView(manageSchoolBox);
         TextView linkSchoolBox = createBox("🔗 Link Multiple School / Switch Account", "#E65100"); linkSchoolBox.setLayoutParams(fullWidthParams); mainLayout.addView(linkSchoolBox);
         
+        // --- Naya Code Shuru: Admin Chat Button ---
+        Button chatHubBtn = new Button(this); 
+        chatHubBtn.setText("💬 Open Smart Chat & Call Hub"); 
+        chatHubBtn.setBackgroundColor(Color.parseColor("#0F2BEB"));
+        chatHubBtn.setTextColor(Color.WHITE); 
+        chatHubBtn.setLayoutParams(fullWidthParams); 
+        mainLayout.addView(chatHubBtn);
+        
+        chatHubBtn.setOnClickListener(v -> {
+            Intent intent = new Intent(MainActivity.this, ChatActivity.class);
+            startActivity(intent);
+        });
+        // --- Naya Code Khatam ---
+
         Button logoutBtn = new Button(this); logoutBtn.setText("LOGOUT ADMIN SESSION"); logoutBtn.setBackgroundColor(Color.parseColor("#D32F2F"));
         logoutBtn.setTextColor(Color.WHITE); logoutBtn.setLayoutParams(fullWidthParams); mainLayout.addView(logoutBtn);
 
@@ -488,9 +499,8 @@ public class MainActivity extends AppCompatActivity {
         logoutBtn.setOnClickListener(v -> {
             db.collection("system_settings").document("admin_data").update("admin_device_id", "");
             sharedPreferences.edit().putBoolean("is_admin_device", false).apply();
-            sharedPreferences.edit().putBoolean("is_admin_active_session", false).apply(); // CLEAR AUTO LOGIN
+            sharedPreferences.edit().putBoolean("is_admin_active_session", false).apply(); 
             
-            // Remove Listener on logout
             if (autoSmsListener != null) {
                 autoSmsListener.remove();
                 autoSmsListener = null;
@@ -582,6 +592,21 @@ public class MainActivity extends AppCompatActivity {
         fullWidthParams.setMargins(15, 15, 15, 15);
 
         TextView linkSchoolBox = createBox("🔗 Link Multiple School / Switch Account", "#E65100"); linkSchoolBox.setLayoutParams(fullWidthParams); mainLayout.addView(linkSchoolBox);
+        
+        // --- Naya Code Shuru: School Chat Button ---
+        Button chatHubBtn = new Button(this); 
+        chatHubBtn.setText("💬 Open Smart Chat & Call Hub"); 
+        chatHubBtn.setBackgroundColor(Color.parseColor("#0F2BEB"));
+        chatHubBtn.setTextColor(Color.WHITE); 
+        chatHubBtn.setLayoutParams(fullWidthParams); 
+        mainLayout.addView(chatHubBtn);
+        
+        chatHubBtn.setOnClickListener(v -> {
+            Intent intent = new Intent(MainActivity.this, ChatActivity.class);
+            startActivity(intent);
+        });
+        // --- Naya Code Khatam ---
+
         Button logoutBtn = new Button(this); logoutBtn.setText("LOGOUT CURRENT SCHOOL"); logoutBtn.setBackgroundColor(Color.parseColor("#D32F2F"));
         logoutBtn.setTextColor(Color.WHITE); logoutBtn.setLayoutParams(fullWidthParams); mainLayout.addView(logoutBtn);
 
@@ -633,9 +658,8 @@ public class MainActivity extends AppCompatActivity {
         
         logoutBtn.setOnClickListener(v -> {
             db.collection("users").document(loggedInSchool).update("school_device_id", "");
-            sharedPreferences.edit().putString("last_active_school", "").apply(); // CLEAR AUTO LOGIN
+            sharedPreferences.edit().putString("last_active_school", "").apply(); 
             
-            // Remove listener on logout
             if (autoSmsListener != null) {
                 autoSmsListener.remove();
                 autoSmsListener = null;
@@ -656,7 +680,7 @@ public class MainActivity extends AppCompatActivity {
     // 🚨 [UPDATE] SMS SENDER LISTENER CONTROL 🚨
     private void startAutoSmsSender() {
         if (autoSmsListener != null) {
-            autoSmsListener.remove(); // Pehle wala hatao taaki double event na aaye
+            autoSmsListener.remove(); 
         }
 
         autoSmsListener = db.collection("sms_logs")
@@ -675,12 +699,11 @@ public class MainActivity extends AppCompatActivity {
                           
                           if (phone != null && msg != null && !phone.isEmpty()) {
                               if (canSendMoreSms()) {
-                                  // 🚨 UPDATE TO 'processing' BEFORE SENDING TO AVOID RE-TRIGGER 🚨
                                   db.collection("sms_logs").document(docId).update("status", "processing")
-                                    .addOnSuccessListener(aVoid -> {
-                                        limitToastShown = false; 
-                                        sendSmsWithDualSim(phone, msg, docId);
-                                    });
+                                      .addOnSuccessListener(aVoid -> {
+                                          limitToastShown = false; 
+                                          sendSmsWithDualSim(phone, msg, docId);
+                                      });
                               } else {
                                   if (!limitToastShown) {
                                       Toast.makeText(MainActivity.this, "Daily SMS Limit Reached! Baki SMS pending me rakhe gaye hain jo kal jayenge.", Toast.LENGTH_LONG).show();
@@ -732,7 +755,7 @@ public class MainActivity extends AppCompatActivity {
                        switchBtn.setOnClickListener(v -> { 
                            String savedPass = sharedPreferences.getString("pass_" + schoolUser, ""); 
                            dialog.dismiss(); 
-                           handleSchoolLogin(schoolUser, savedPass, false, -1); // Auto switch keeps old SIM
+                           handleSchoolLogin(schoolUser, savedPass, false, -1); 
                        }); }
                 row.addView(nameTv); row.addView(switchBtn); table.addView(row);
             }
@@ -743,7 +766,6 @@ public class MainActivity extends AppCompatActivity {
         EditText newUsername = new EditText(this); newUsername.setHint("School Username"); dialogLayout.addView(newUsername);
         EditText newPassword = new EditText(this); newPassword.setHint("School Password"); dialogLayout.addView(newPassword);
         
-        // 🚨 [NEW] SIM SELECTION FOR LINKED ACCOUNTS 🚨
         Spinner simSpinner = new Spinner(this);
         List<Integer> subIds = new ArrayList<>();
         List<String> simNames = new ArrayList<>();
@@ -774,7 +796,7 @@ public class MainActivity extends AppCompatActivity {
             db.collection("users").document(u).get().addOnSuccessListener(doc -> {
                 if (doc.exists() && p.equals(doc.getString("password"))) {
                     sharedPreferences.edit().putString("pass_" + u, p).apply();
-                    if(selectedSim != -1) sharedPreferences.edit().putInt("sim_" + u, selectedSim).apply(); // Save SIM for new linked school
+                    if(selectedSim != -1) sharedPreferences.edit().putInt("sim_" + u, selectedSim).apply(); 
                     
                     String currentList = sharedPreferences.getString("linked_list", "");
                     if (!currentList.contains(u)) { currentList = currentList.isEmpty() ? u : currentList + "," + u; sharedPreferences.edit().putString("linked_list", currentList).apply(); }
@@ -838,12 +860,11 @@ public class MainActivity extends AppCompatActivity {
     intent.putExtra("schoolId", loggedInSchool);
     intent.putExtra("isAdmin", isAdminMode);
     
-    // FLAG_ONE_SHOT use karein taaki intent sirf ek baar fire ho
     PendingIntent sentPI = PendingIntent.getBroadcast(
             this, 
-            docId.hashCode(), // Unique ID based on Document ID
+            docId.hashCode(), 
             intent, 
-            PendingIntent.FLAG_ONE_SHOT | PendingIntent.FLAG_IMMUTABLE // (Android 12+ ke liye)
+            PendingIntent.FLAG_ONE_SHOT | PendingIntent.FLAG_IMMUTABLE 
     );
 
     try {
@@ -868,10 +889,9 @@ public class MainActivity extends AppCompatActivity {
         
         ArrayList<String> parts = smsManager.divideMessage(msg);
         ArrayList<PendingIntent> sentIntents = new ArrayList<>();
-        ArrayList<PendingIntent> deliveryIntents = new ArrayList<>(); // Ise bhi zaroor bhejein
+        ArrayList<PendingIntent> deliveryIntents = new ArrayList<>(); 
 
         for (int i = 0; i < parts.size(); i++) {
-            // Aakhri part ke liye Intent lagayein
             if (i == parts.size() - 1) {
                 sentIntents.add(sentPI); 
             } else {
