@@ -109,7 +109,7 @@ public class MainActivity extends AppCompatActivity {
         try {
             FirebaseApp.initializeApp(this);
             db = FirebaseFirestore.getInstance();
-            mAuth = FirebaseAuth.getInstance(); // Naya Firebase Auth Initialize kiya gaya
+            mAuth = FirebaseAuth.getInstance(); 
             deviceId = Settings.Secure.getString(getContentResolver(), Settings.Secure.ANDROID_ID);
             sharedPreferences = getSharedPreferences("MEHF_Prefs", Context.MODE_PRIVATE);
 
@@ -170,14 +170,14 @@ public class MainActivity extends AppCompatActivity {
         String lastSchool = sharedPreferences.getString("last_active_school", "");
 
         if (currentUser != null) {
-            // Agar pehle se login hai, toh role ke hisab se screen bhejein
             if (isConnectUser) {
                 openChatActivity();
             } else if (isMasterAdmin) {
                 isAdminMode = true;
                 showAdminDashboard();
             } else if (!lastSchool.isEmpty()) {
-                db.collection("users").document(lastSchool).get().addOnSuccessListener(this::showSchoolDashboard);
+                String savedPass = sharedPreferences.getString("pass_" + lastSchool, "");
+                handleSchoolLogin(lastSchool, savedPass, false, -1);
             } else {
                 showLoginScreen();
             }
@@ -199,13 +199,12 @@ public class MainActivity extends AppCompatActivity {
         title.setPadding(0, 0, 0, 40);
         mainLayout.addView(title);
 
-        // Naya Role Group (Admin, School, aur Connect User)
         RadioGroup roleGroup = new RadioGroup(this);
         roleGroup.setOrientation(LinearLayout.HORIZONTAL);
         roleGroup.setGravity(Gravity.CENTER);
         RadioButton rdoSchool = new RadioButton(this); rdoSchool.setText("School"); rdoSchool.setId(View.generateViewId());
         RadioButton rdoAdmin = new RadioButton(this); rdoAdmin.setText("Admin"); rdoAdmin.setId(View.generateViewId());
-        RadioButton rdoUser = new RadioButton(this); rdoUser.setText("Connect User"); rdoUser.setId(View.generateViewId()); // Naya Connect User
+        RadioButton rdoUser = new RadioButton(this); rdoUser.setText("Connect User"); rdoUser.setId(View.generateViewId()); 
         
         roleGroup.addView(rdoSchool); roleGroup.addView(rdoAdmin); roleGroup.addView(rdoUser);
         mainLayout.addView(roleGroup);
@@ -257,7 +256,6 @@ public class MainActivity extends AppCompatActivity {
         recoverBtn.setTextColor(Color.parseColor("#757575"));
         mainLayout.addView(recoverBtn);
 
-        // Hide SIM selector if "Connect User" is selected (Kyunki regular user ko SMS Gateway nahi chahiye)
         roleGroup.setOnCheckedChangeListener((group, checkedId) -> {
             int visibility = (checkedId == rdoUser.getId()) ? View.GONE : View.VISIBLE;
             simLabel.setVisibility(visibility);
@@ -275,59 +273,61 @@ public class MainActivity extends AppCompatActivity {
                 return;
             }
 
-            // Firebase Auth Email format prepare karna
-            String email = user.contains("@") ? user : user + "@mehf.app";
-            Toast.makeText(this, "Authenticating...", Toast.LENGTH_SHORT).show();
-
-            // 🔥 [UPDATE] FIREBASE AUTH LOGIN PROCESS 🔥
-            mAuth.signInWithEmailAndPassword(email, pass).addOnCompleteListener(task -> {
-                if (task.isSuccessful()) {
-                    if (roleGroup.getCheckedRadioButtonId() == rdoUser.getId()) {
-                        handleConnectUserLogin();
-                    } else if (roleGroup.getCheckedRadioButtonId() == rdoAdmin.getId()) {
-                        handleAdminLogin();
-                    } else {
-                        handleSchoolLogin(user, pass, true, selectedSimId);
-                    }
-                } else {
-                    Toast.makeText(this, "Login Failed: Galat Username/Password ya Auth me register nahi hai!", Toast.LENGTH_LONG).show();
-                }
-            });
+            if (roleGroup.getCheckedRadioButtonId() == rdoUser.getId()) {
+                handleConnectUserLogin(user, pass);
+            } else if (roleGroup.getCheckedRadioButtonId() == rdoAdmin.getId()) {
+                handleAdminLogin(user, pass);
+            } else {
+                handleSchoolLogin(user, pass, true, selectedSimId);
+            }
         });
 
         recoverBtn.setOnClickListener(v -> showMasterRecoveryDialog());
     }
 
     // ==================== 2. ROLE BASED HANDLERS ====================
-    private void handleConnectUserLogin() {
-        // Sirf Chat ke liye login hua hai, SMS Gateway hide rahega
-        sharedPreferences.edit().putBoolean("is_connect_user", true).apply();
-        sharedPreferences.edit().putBoolean("is_admin_active_session", false).apply();
-        sharedPreferences.edit().putString("last_active_school", "").apply();
-        Toast.makeText(this, "Welcome Connect User!", Toast.LENGTH_SHORT).show();
-        openChatActivity();
+    private void handleConnectUserLogin(String user, String pass) {
+        String email = user.contains("@") ? user : user + "@mehf.app";
+        Toast.makeText(this, "Authenticating...", Toast.LENGTH_SHORT).show();
+        mAuth.signInWithEmailAndPassword(email, pass).addOnCompleteListener(task -> {
+            if (task.isSuccessful()) {
+                sharedPreferences.edit().putBoolean("is_connect_user", true).apply();
+                sharedPreferences.edit().putBoolean("is_admin_active_session", false).apply();
+                sharedPreferences.edit().putString("last_active_school", "").apply();
+                openChatActivity();
+            } else {
+                Toast.makeText(this, "Login Failed! Details check karein.", Toast.LENGTH_LONG).show();
+            }
+        });
     }
 
     private void openChatActivity() {
         Intent intent = new Intent(MainActivity.this, ChatActivity.class);
         startActivity(intent);
-        finish(); // MainActivity ko band kar denge taaki Back press karne par wapas yahan na aaye
+        finish(); 
     }
 
-    private void handleAdminLogin() {
-        // Firebase Auth se verify hone ke baad Firestore Admin Data check
-        db.collection("system_settings").document("admin_data").get().addOnSuccessListener(doc -> {
-            if (doc.exists() && doc.contains("admin_device_id") && !doc.getString("admin_device_id").isEmpty()) {
-                String savedId = doc.getString("admin_device_id");
-                if (deviceId.equals(savedId)) {
-                    saveAdminSession();
-                } else {
-                    showAlert("Notice", "Admin is already logged in on another device. Please use Admin Recovery.");
-                    mAuth.signOut(); // Device match nahi hua toh Auth se bhi logout kar do
-                }
+    private void handleAdminLogin(String user, String pass) {
+        String email = user.contains("@") ? user : user + "@mehf.app";
+        Toast.makeText(this, "Authenticating Admin...", Toast.LENGTH_SHORT).show();
+        mAuth.signInWithEmailAndPassword(email, pass).addOnCompleteListener(task -> {
+            if (task.isSuccessful()) {
+                db.collection("system_settings").document("admin_data").get().addOnSuccessListener(doc -> {
+                    if (doc.exists() && doc.contains("admin_device_id") && !doc.getString("admin_device_id").isEmpty()) {
+                        String savedId = doc.getString("admin_device_id");
+                        if (deviceId.equals(savedId)) {
+                            saveAdminSession();
+                        } else {
+                            showAlert("Notice", "Admin is already logged in on another device. Please use Admin Recovery.");
+                            mAuth.signOut(); 
+                        }
+                    } else {
+                        db.collection("system_settings").document("admin_data").update("admin_device_id", deviceId);
+                        saveAdminSession();
+                    }
+                });
             } else {
-                db.collection("system_settings").document("admin_data").update("admin_device_id", deviceId);
-                saveAdminSession();
+                Toast.makeText(this, "Admin Auth Failed!", Toast.LENGTH_SHORT).show();
             }
         });
     }
@@ -340,48 +340,82 @@ public class MainActivity extends AppCompatActivity {
         showAdminDashboard();
     }
 
-    private void handleSchoolLogin(String username, String password, boolean checkDeviceLock, int simSubId) {
-        // Firebase Auth verify ho chuka hai, ab Firestore users collection se data la rahe hain
-        db.collection("users").document(username).get().addOnSuccessListener(doc -> {
-            if (doc.exists()) {
-                if (!doc.contains("recovery_pin") || doc.getString("recovery_pin") == null || doc.getString("recovery_pin").isEmpty()) {
-                    showFirstTimeSetupDialog(username, doc);
-                    return;
-                }
-                if (checkDeviceLock && doc.contains("school_device_id") && !doc.getString("school_device_id").isEmpty()) {
-                    String activeDeviceId = doc.getString("school_device_id");
-                    if (!deviceId.equals(activeDeviceId)) {
-                        showAlert("Device Locked", "This school is already active on another device.");
-                        mAuth.signOut();
-                        return;
-                    }
-                }
-                db.collection("users").document(username).update("school_device_id", deviceId);
-                loggedInSchool = username;
-                isAdminMode = false;
-                
-                sharedPreferences.edit().putString("pass_" + username, password).apply();
-                sharedPreferences.edit().putString("last_active_school", username).apply();
-                sharedPreferences.edit().putBoolean("is_admin_active_session", false).apply();
-                sharedPreferences.edit().putBoolean("is_connect_user", false).apply();
-                if (simSubId != -1) {
-                    sharedPreferences.edit().putInt("sim_" + username, simSubId).apply(); 
-                }
+    // 🔥 SMART SEARCH PROFILE HANDLER 🔥
+    private void handleSchoolLogin(String originalInput, String password, boolean checkDeviceLock, int simSubId) {
+        if(originalInput.isEmpty() || password.isEmpty()){
+            Toast.makeText(this, "Username aur Password bharein!", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        
+        String email = originalInput.contains("@") ? originalInput : originalInput + "@mehf.app";
+        Toast.makeText(this, "Authenticating...", Toast.LENGTH_SHORT).show();
 
-                String linked = sharedPreferences.getString("linked_list", "");
-                if (!linked.contains(username)) {
-                    linked = linked.isEmpty() ? username : linked + "," + username;
-                    sharedPreferences.edit().putString("linked_list", linked).apply();
+        mAuth.signInWithEmailAndPassword(email, password).addOnCompleteListener(task -> {
+            if (task.isSuccessful()) {
+                String docIdToSearch = originalInput;
+                if (originalInput.contains("@")) {
+                    docIdToSearch = originalInput.split("@")[0]; // email se pehle ka hissa
                 }
-                showSchoolDashboard(doc);
+                final String finalDocId = docIdToSearch;
+                
+                // 1. Direct naam ya email prefix se check karte hain
+                db.collection("users").document(finalDocId).get().addOnCompleteListener(docTask -> {
+                    if (docTask.isSuccessful() && docTask.getResult().exists()) {
+                        processValidProfile(docTask.getResult(), finalDocId, originalInput, password, checkDeviceLock, simSubId);
+                    } else {
+                        // 2. Agar nahi mila, toh UID se check karte hain (Auth Migration Logic)
+                        String uid = mAuth.getCurrentUser().getUid();
+                        db.collection("users").document(uid).get().addOnCompleteListener(uidTask -> {
+                            if (uidTask.isSuccessful() && uidTask.getResult().exists()) {
+                                processValidProfile(uidTask.getResult(), uid, originalInput, password, checkDeviceLock, simSubId);
+                            } else {
+                                Toast.makeText(this, "Firestore Profile nahi mili! Database structure check karein.", Toast.LENGTH_LONG).show();
+                                mAuth.signOut();
+                            }
+                        });
+                    }
+                });
             } else {
-                Toast.makeText(this, "School Profile Firestore mein nahi mili!", Toast.LENGTH_SHORT).show();
-                mAuth.signOut();
+                Toast.makeText(this, "Firebase Auth Login Failed! Galat Username ya Password.", Toast.LENGTH_LONG).show();
             }
         });
     }
 
-    private void showFirstTimeSetupDialog(String username, DocumentSnapshot doc) {
+    private void processValidProfile(DocumentSnapshot doc, String docId, String originalInput, String password, boolean checkDeviceLock, int simSubId) {
+        if (!doc.contains("recovery_pin") || doc.getString("recovery_pin") == null || doc.getString("recovery_pin").isEmpty()) {
+            showFirstTimeSetupDialog(originalInput, docId, password, doc);
+            return;
+        }
+        if (checkDeviceLock && doc.contains("school_device_id") && !doc.getString("school_device_id").isEmpty()) {
+            String activeDeviceId = doc.getString("school_device_id");
+            if (!deviceId.equals(activeDeviceId)) {
+                showAlert("Device Locked", "This school is already active on another device.");
+                mAuth.signOut();
+                return;
+            }
+        }
+        
+        db.collection("users").document(docId).update("school_device_id", deviceId);
+        loggedInSchool = docId; 
+        isAdminMode = false;
+        
+        sharedPreferences.edit().putString("pass_" + originalInput, password).apply();
+        sharedPreferences.edit().putString("last_active_school", originalInput).apply();
+        sharedPreferences.edit().putBoolean("is_admin_active_session", false).apply();
+        sharedPreferences.edit().putBoolean("is_connect_user", false).apply();
+        if (simSubId != -1) {
+            sharedPreferences.edit().putInt("sim_" + originalInput, simSubId).apply(); 
+        }
+
+        String linked = sharedPreferences.getString("linked_list", "");
+        if (!linked.contains(originalInput)) {
+            linked = linked.isEmpty() ? originalInput : linked + "," + originalInput;
+            sharedPreferences.edit().putString("linked_list", linked).apply();
+        }
+        showSchoolDashboard(doc);
+    }
+
+    private void showFirstTimeSetupDialog(String originalInput, String docId, String password, DocumentSnapshot doc) {
         ScrollView dialogScroll = new ScrollView(this);
         LinearLayout layout = new LinearLayout(this);
         layout.setOrientation(LinearLayout.VERTICAL);
@@ -419,10 +453,10 @@ public class MainActivity extends AppCompatActivity {
             }
             Map<String, Object> setupData = new HashMap<>();
             setupData.put("school_name", name); setupData.put("recovery_pin", pin); setupData.put("school_device_id", deviceId);
-            db.collection("users").document(username).update(setupData).addOnSuccessListener(aVoid -> {
+            db.collection("users").document(docId).update(setupData).addOnSuccessListener(aVoid -> {
                 Toast.makeText(this, "Account Activated Successfully!", Toast.LENGTH_SHORT).show();
                 dialog.dismiss();
-                handleSchoolLogin(username, doc.getString("password"), true, -1);
+                handleSchoolLogin(originalInput, password, true, -1);
             });
         });
     }
@@ -472,16 +506,20 @@ public class MainActivity extends AppCompatActivity {
             } else {
                 String schoolUser = schoolUserInput.getText().toString().trim();
                 if(schoolUser.isEmpty()) return;
-                db.collection("users").document(schoolUser).get().addOnSuccessListener(doc -> {
+                
+                String docIdToSearch = schoolUser.contains("@") ? schoolUser.split("@")[0] : schoolUser;
+                db.collection("users").document(docIdToSearch).get().addOnSuccessListener(doc -> {
                     if(doc.exists()) {
                         if (!doc.contains("recovery_pin") || doc.getString("recovery_pin") == null || doc.getString("recovery_pin").isEmpty()) {
                             Toast.makeText(this, "Is school ka recovery PIN set nahi hai.", Toast.LENGTH_LONG).show(); return;
                         }
                         if (inputPin.equals(doc.getString("recovery_pin"))) {
-                            db.collection("users").document(schoolUser).update("school_device_id", deviceId);
+                            db.collection("users").document(docIdToSearch).update("school_device_id", deviceId);
                             Toast.makeText(this, "Lock Reset Successful! Now Login.", Toast.LENGTH_LONG).show();
                             dialog.dismiss();
                         } else { Toast.makeText(this, "Galat PIN!", Toast.LENGTH_SHORT).show(); }
+                    } else {
+                        Toast.makeText(this, "School Username nahi mila!", Toast.LENGTH_SHORT).show();
                     }
                 });
             }
@@ -514,7 +552,6 @@ public class MainActivity extends AppCompatActivity {
         TextView manageSchoolBox = createBox("⚙️ Manage School Plan", "#6A1B9A"); manageSchoolBox.setLayoutParams(fullWidthParams); mainLayout.addView(manageSchoolBox);
         TextView linkSchoolBox = createBox("🔗 Link Multiple School / Switch Account", "#E65100"); linkSchoolBox.setLayoutParams(fullWidthParams); mainLayout.addView(linkSchoolBox);
         
-        // --- Naya Chat & Call Button ---
         Button chatHubBtn = new Button(this); 
         chatHubBtn.setText("💬 Open Connect Users Hub (Chat & Call)"); 
         chatHubBtn.setBackgroundColor(Color.parseColor("#0F2BEB"));
@@ -543,7 +580,7 @@ public class MainActivity extends AppCompatActivity {
         linkSchoolBox.setOnClickListener(v -> showLinkMultipleSchoolDialog());
         
         logoutBtn.setOnClickListener(v -> {
-            mAuth.signOut(); // Firebase se Logout
+            mAuth.signOut(); 
             db.collection("system_settings").document("admin_data").update("admin_device_id", "");
             sharedPreferences.edit().putBoolean("is_admin_device", false).apply();
             sharedPreferences.edit().putBoolean("is_admin_active_session", false).apply(); 
@@ -577,7 +614,10 @@ public class MainActivity extends AppCompatActivity {
         Toast.makeText(this, "Loading users...", Toast.LENGTH_SHORT).show();
         db.collection("users").get().addOnSuccessListener(docs -> {
             ArrayList<String> schoolList = new ArrayList<>();
-            for (DocumentSnapshot d : docs) { schoolList.add(d.getId()); }
+            for (DocumentSnapshot d : docs) { 
+                String name = d.contains("school_name") ? d.getString("school_name") : d.getId();
+                schoolList.add(d.getId() + " - " + name); 
+            }
 
             ScrollView dialogScroll = new ScrollView(this);
             LinearLayout dialogLayout = new LinearLayout(this); dialogLayout.setOrientation(LinearLayout.VERTICAL); dialogLayout.setPadding(40, 40, 40, 40);
@@ -597,7 +637,9 @@ public class MainActivity extends AppCompatActivity {
             AlertDialog dialog = new AlertDialog.Builder(this).setTitle("Manage School Plan").setView(dialogScroll).show();
 
             submitBtn.setOnClickListener(v -> {
-                String selectedSchool = spinner.getSelectedItem().toString();
+                String selectedRaw = spinner.getSelectedItem().toString();
+                String selectedSchool = selectedRaw.split(" - ")[0]; // ID alag kar rahe hain
+                
                 String limitVal = limitInput.getText().toString().trim();
                 String startD = startInput.getText().toString().trim();
                 String expD = expiryInput.getText().toString().trim();
@@ -645,7 +687,6 @@ public class MainActivity extends AppCompatActivity {
 
         TextView linkSchoolBox = createBox("🔗 Link Multiple School / Switch Account", "#E65100"); linkSchoolBox.setLayoutParams(fullWidthParams); mainLayout.addView(linkSchoolBox);
         
-        // --- Naya Chat Button ---
         Button chatHubBtn = new Button(this); 
         chatHubBtn.setText("💬 Open Connect Users Hub (Chat & Call)"); 
         chatHubBtn.setBackgroundColor(Color.parseColor("#0F2BEB"));
@@ -710,7 +751,7 @@ public class MainActivity extends AppCompatActivity {
         linkSchoolBox.setOnClickListener(v -> showLinkMultipleSchoolDialog());
         
         logoutBtn.setOnClickListener(v -> {
-            mAuth.signOut(); // Firebase se Logout
+            mAuth.signOut(); 
             db.collection("users").document(loggedInSchool).update("school_device_id", "");
             sharedPreferences.edit().putString("last_active_school", "").apply(); 
             
@@ -797,18 +838,19 @@ public class MainActivity extends AppCompatActivity {
         }
 
         String linkedListStr = sharedPreferences.getString("linked_list", "");
+        String lastActiveSchool = sharedPreferences.getString("last_active_school", "");
+        
         if (!linkedListStr.isEmpty()) {
             String[] schools = linkedListStr.split(",");
             for (String schoolUser : schools) {
                 if(schoolUser.isEmpty()) continue;
                 TableRow row = new TableRow(this); TextView nameTv = new TextView(this); nameTv.setText(schoolUser);
                 Button switchBtn = new Button(this);
-                if (!isAdminMode && schoolUser.equals(loggedInSchool)) { switchBtn.setText("Active"); switchBtn.setEnabled(false); } 
+                if (!isAdminMode && schoolUser.equals(lastActiveSchool)) { switchBtn.setText("Active"); switchBtn.setEnabled(false); } 
                 else { switchBtn.setText("Switch"); switchBtn.setBackgroundColor(Color.parseColor("#1E88E5")); switchBtn.setTextColor(Color.WHITE);
                        switchBtn.setOnClickListener(v -> { 
                            String savedPass = sharedPreferences.getString("pass_" + schoolUser, ""); 
                            dialog.dismiss(); 
-                           // Notice: Yahan password already save hai, to bina dobara Firebase Auth kiye direct handleSchoolLogin run karein
                            handleSchoolLogin(schoolUser, savedPass, false, -1); 
                        }); }
                 row.addView(nameTv); row.addView(switchBtn); table.addView(row);
