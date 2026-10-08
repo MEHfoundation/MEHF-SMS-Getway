@@ -4,7 +4,7 @@
     android:layout_height="match_parent"
     android:background="#E5DDD5">
 
-    <!-- Header / Title Bar -->
+    <!-- Header -->
     <LinearLayout
         android:id="@+id/headerLayout"
         android:layout_width="match_parent"
@@ -24,20 +24,59 @@
             android:textSize="18sp"
             android:textStyle="bold" />
 
-        <!-- ZegoCloud Voice & Video Call Buttons -->
-        <com.zegocloud.uikit.prebuilt.call.invite.widget.ZegoSendCallInvitationButton
+        <!-- Custom WebRTC Buttons -->
+        <ImageButton
             android:id="@+id/btnVoiceCall"
             android:layout_width="40dp"
             android:layout_height="40dp"
             android:layout_marginRight="10dp"
-            android:background="?attr/selectableItemBackground" />
+            android:background="?attr/selectableItemBackground"
+            android:src="@android:drawable/ic_btn_speak_now"
+            android:tint="#FFFFFF" />
 
-        <com.zegocloud.uikit.prebuilt.call.invite.widget.ZegoSendCallInvitationButton
+        <ImageButton
             android:id="@+id/btnVideoCall"
             android:layout_width="40dp"
             android:layout_height="40dp"
-            android:background="?attr/selectableItemBackground" />
+            android:background="?attr/selectableItemBackground"
+            android:src="@android:drawable/ic_menu_camera"
+            android:tint="#FFFFFF" />
     </LinearLayout>
+
+    <!-- WebRTC Video Container (कॉल आने पर दिखेगा) -->
+    <RelativeLayout
+        android:id="@+id/videoCallContainer"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:layout_below="@id/headerLayout"
+        android:visibility="gone"
+        android:background="#000000"
+        android:elevation="10dp">
+
+        <org.webrtc.SurfaceViewRenderer
+            android:id="@+id/remoteVideoView"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent" />
+
+        <org.webrtc.SurfaceViewRenderer
+            android:id="@+id/localVideoView"
+            android:layout_width="120dp"
+            android:layout_height="160dp"
+            android:layout_alignParentBottom="true"
+            android:layout_alignParentRight="true"
+            android:layout_margin="20dp" />
+
+        <Button
+            android:id="@+id/btnEndCall"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_alignParentBottom="true"
+            android:layout_centerHorizontal="true"
+            android:layout_marginBottom="30dp"
+            android:backgroundTint="#D32F2F"
+            android:text="End Call"
+            android:textColor="#FFFFFF" />
+    </RelativeLayout>
 
     <!-- Chat Messages Area -->
     <ScrollView
