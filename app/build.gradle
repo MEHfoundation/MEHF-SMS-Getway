@@ -23,6 +23,5 @@ dependencies {
     // OneSignal Notification
     implementation 'com.onesignal:OneSignal:[5.0.0, 5.99.99]'
 
-    // ZegoCloud - WebRTC Voice & Video Call SDK
-    implementation 'com.github.ZEGOCLOUD:zego_uikit_prebuilt_call_android:+'
+    implementation 'org.webrtc:google-webrtc:1.0.32006'
 }
