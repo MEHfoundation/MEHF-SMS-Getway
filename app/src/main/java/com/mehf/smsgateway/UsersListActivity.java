@@ -4,6 +4,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.graphics.Color;
+import android.graphics.drawable.GradientDrawable; // 🔥 YAHAN IMPORT ADD KIYA GAYA HAI
 import android.os.Bundle;
 import android.text.Editable;
 import android.text.TextWatcher;
@@ -130,7 +131,7 @@ public class UsersListActivity extends AppCompatActivity {
                 if (doc.exists()) {
                     currentUserRole = doc.contains("role") ? doc.getString("role") : "student";
                     currentUserSchoolId = doc.contains("schoolId") ? doc.getString("schoolId") : "NA";
-                    if(currentUserRole.equals("school")) currentUserSchoolId = currentUserDocId; // School ID logic
+                    if(currentUserRole.equals("school")) currentUserSchoolId = currentUserDocId; 
                     listenForRecentChatsAndSort(); 
                     loadContactsFromFirestore();
                 } else {
@@ -312,7 +313,7 @@ public class UsersListActivity extends AppCompatActivity {
                 Intent intent = new Intent(this, ChatActivity.class);
                 intent.putExtra("targetUserId", targetId);
                 intent.putExtra("targetUserName", title);
-                intent.putExtra("schoolId", currentUserSchoolId); // 🔥 FIXED: Pass school ID for messages!
+                intent.putExtra("schoolId", currentUserSchoolId);
                 startActivity(intent);
             });
         }
