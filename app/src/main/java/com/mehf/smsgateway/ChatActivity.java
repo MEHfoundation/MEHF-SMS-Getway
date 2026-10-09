@@ -1,17 +1,22 @@
 package com.mehf.smsgateway;
 
 import android.Manifest;
+import android.app.KeyguardManager;
+import android.content.Context;
 import android.content.pm.PackageManager;
 import android.graphics.Color;
 import android.graphics.drawable.GradientDrawable;
+import android.media.AudioManager;
 import android.media.MediaPlayer;
 import android.media.RingtoneManager;
 import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.SystemClock;
 import android.util.Log;
 import android.view.Gravity;
 import android.view.View;
+import android.view.WindowManager;
 import android.widget.Button;
 import android.widget.Chronometer;
 import android.widget.EditText;
@@ -68,6 +73,7 @@ public class ChatActivity extends AppCompatActivity {
     private TextView tvChatTitle, tvIncomingCallTitle;
     private Chronometer callTimer; 
     private FirebaseFirestore db;
+    private AudioManager audioManager;
     
     private SurfaceViewRenderer localVideoView;
     private SurfaceViewRenderer remoteVideoView;
@@ -87,11 +93,27 @@ public class ChatActivity extends AppCompatActivity {
     private String currentUserDocId = ""; 
     private String currentUserName = "";
     private String targetUserId = ""; 
+    private String chatSchoolId = "NA"; // 🔥 NEW: For saving messages correctly
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+
+        // 🔥 LOCK SCREEN WAKE UP LOGIC
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
+            setShowWhenLocked(true);
+            setTurnScreenOn(true);
+            KeyguardManager km = (KeyguardManager) getSystemService(Context.KEYGUARD_SERVICE);
+            if (km != null) km.requestDismissKeyguard(this, null);
+        } else {
+            getWindow().addFlags(WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED |
+                    WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON |
+                    WindowManager.LayoutParams.FLAG_DISMISS_KEYGUARD);
+        }
+        getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+
         setContentView(R.layout.activity_chat);
+        audioManager = (AudioManager) getSystemService(Context.AUDIO_SERVICE);
 
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED ||
             ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
@@ -126,13 +148,13 @@ public class ChatActivity extends AppCompatActivity {
             currentUserDocId = user.getUid();
             currentUserName = "User";
         }
-        
-        if (currentUserDocId == null || currentUserDocId.isEmpty()) {
-            currentUserDocId = "TempUser_" + System.currentTimeMillis();
-        }
+        if (currentUserDocId == null || currentUserDocId.isEmpty()) currentUserDocId = "TempUser_" + System.currentTimeMillis();
 
         targetUserId = getIntent().getStringExtra("targetUserId");
         String targetName = getIntent().getStringExtra("targetUserName");
+        chatSchoolId = getIntent().getStringExtra("schoolId"); // Fetch school ID
+        if (chatSchoolId == null) chatSchoolId = "NA";
+
         if (targetUserId == null || targetUserId.isEmpty()) targetUserId = "Unknown";
         tvChatTitle.setText(targetName != null ? targetName : targetUserId);
 
@@ -141,7 +163,6 @@ public class ChatActivity extends AppCompatActivity {
             if (!text.isEmpty()) {
                 sendMessageToFirebase(text);
                 etMessage.setText("");
-                if (targetUserId.equals("AI")) fetchAIReply(text);
             }
         });
         
@@ -165,6 +186,10 @@ public class ChatActivity extends AppCompatActivity {
             incomingCallLayout.setVisibility(View.GONE);
             videoCallContainer.setVisibility(View.VISIBLE);
             
+            // Route audio correctly
+            audioManager.setMode(AudioManager.MODE_IN_COMMUNICATION);
+            audioManager.setSpeakerphoneOn(isIncomingVideo);
+
             startLocalStream(isIncomingVideo);
             createPeerConnection();
 
@@ -198,15 +223,15 @@ public class ChatActivity extends AppCompatActivity {
         chatData.put("receiverId", targetUserId);
         chatData.put("message", text);
         chatData.put("status", "sent"); 
+        chatData.put("schoolId", chatSchoolId); // 🔥 FIXED: Messages will now show in School Dashboard
         chatData.put("timestamp", System.currentTimeMillis());
         db.collection("chats").add(chatData);
     }
 
-    // 🔥 LIMIT SAVER & TICKS LOGIC
     private void listenForLiveMessages() {
         db.collection("chats")
           .orderBy("timestamp", Query.Direction.ASCENDING)
-          .limitToLast(50) // 🔥 Firebase Quota Saver
+          .limitToLast(50) 
           .addSnapshotListener((snapshots, e) -> {
               if (e != null || snapshots == null) return;
               
@@ -224,6 +249,7 @@ public class ChatActivity extends AppCompatActivity {
                       (receiverId.equals(targetUserId) && targetUserId.startsWith("group_"))) {
                       
                       if (dc.getType() == DocumentChange.Type.ADDED) {
+                          // 🔥 If message is from them, mark as READ (Green Tick for them)
                           if (!senderId.equals(currentUserDocId) && !"read".equals(status)) {
                               db.collection("chats").document(docId).update("status", "read");
                           }
@@ -271,9 +297,10 @@ public class ChatActivity extends AppCompatActivity {
         
         if (isMe) {
             boolean isRead = "read".equals(status);
-            String tick = isRead ? " ✓✓" : " ✓";
+            boolean isDelivered = "delivered".equals(status);
+            String tick = isRead ? " ✓✓" : (isDelivered ? " ✓✓" : " ✓"); // 🔥 WHATSAPP TICKS
             tvTimeTick.setText(timeStr + tick);
-            tvTimeTick.setTextColor(isRead ? Color.parseColor("#34B7F1") : Color.GRAY); 
+            tvTimeTick.setTextColor(isRead ? Color.parseColor("#4CAF50") : Color.GRAY); // Green if Read
         } else {
             tvTimeTick.setText(timeStr);
             tvTimeTick.setTextColor(Color.GRAY);
@@ -293,18 +320,16 @@ public class ChatActivity extends AppCompatActivity {
 
     private void updateMessageTickUI(String docId, String status) {
         TextView tvTick = chatListLayout.findViewWithTag("tick_" + docId);
-        if (tvTick != null && "read".equals(status)) {
-            String currentText = tvTick.getText().toString();
-            if(currentText.contains("✓")) {
-                currentText = currentText.replace("✓✓", "").replace("✓", "").trim();
+        if (tvTick != null) {
+            String currentText = tvTick.getText().toString().replace("✓✓", "").replace("✓", "").trim();
+            if ("read".equals(status)) {
                 tvTick.setText(currentText + " ✓✓");
-                tvTick.setTextColor(Color.parseColor("#34B7F1")); 
+                tvTick.setTextColor(Color.parseColor("#4CAF50")); // Green
+            } else if ("delivered".equals(status)) {
+                tvTick.setText(currentText + " ✓✓");
+                tvTick.setTextColor(Color.GRAY);
             }
         }
-    }
-
-    private void fetchAIReply(String userText) {
-        // AI Logic same as before...
     }
 
     private void initWebRTC() {
@@ -328,7 +353,7 @@ public class ChatActivity extends AppCompatActivity {
                     .setVideoDecoderFactory(new org.webrtc.DefaultVideoDecoderFactory(rootEglBase.getEglBaseContext()))
                     .setVideoEncoderFactory(new org.webrtc.DefaultVideoEncoderFactory(rootEglBase.getEglBaseContext(), true, true))
                     .createPeerConnectionFactory();
-        } catch (Exception e) { Log.e("WebRTC", "Setup Error", e); }
+        } catch (Exception e) {}
     }
 
     private void startLocalStream(boolean isVideo) {
@@ -359,25 +384,18 @@ public class ChatActivity extends AppCompatActivity {
     private void createPeerConnection() {
         if (peerConnectionFactory == null) return;
         List<PeerConnection.IceServer> iceServers = new ArrayList<>();
-        
-        // 1. Google Free STUN
         iceServers.add(PeerConnection.IceServer.builder("stun:stun.l.google.com:19302").createIceServer());
-        
-        // 2. 🔥 Free TURN Server (For Anti-Black Screen on 5G/LTE)
         PeerConnection.IceServer turnServer = PeerConnection.IceServer.builder("turn:global.relay.metered.ca:80")
-                .setUsername("83226dbb4cd1e1df591d3101")
-                .setPassword("83226dbb4cd1e1df591d3101")
-                .createIceServer();
+                .setUsername("83226dbb4cd1e1df591d3101").setPassword("83226dbb4cd1e1df591d3101").createIceServer();
         iceServers.add(turnServer);
 
         PeerConnection.RTCConfiguration rtcConfig = new PeerConnection.RTCConfiguration(iceServers);
         peerConnection = peerConnectionFactory.createPeerConnection(rtcConfig, new PeerConnection.Observer() {
             @Override public void onSignalingChange(PeerConnection.SignalingState signalingState) {}
-            
-            // 🔥 CALL TIMER & NETWORK STATUS
             @Override public void onIceConnectionChange(PeerConnection.IceConnectionState iceConnectionState) {
                 runOnUiThread(() -> {
                     if (iceConnectionState == PeerConnection.IceConnectionState.CONNECTED) {
+                        stopRingtone(); // Call connected, stop ringtone instantly
                         callTimer.setBase(SystemClock.elapsedRealtime());
                         callTimer.start();
                         callTimer.setVisibility(View.VISIBLE);
@@ -423,6 +441,11 @@ public class ChatActivity extends AppCompatActivity {
         
         videoCallContainer.setVisibility(View.VISIBLE);
         Toast.makeText(this, "Calling...", Toast.LENGTH_SHORT).show();
+        
+        // Setup audio route
+        audioManager.setMode(AudioManager.MODE_IN_COMMUNICATION);
+        audioManager.setSpeakerphoneOn(isVideo);
+
         startLocalStream(isVideo);
         createPeerConnection();
 
@@ -493,6 +516,7 @@ public class ChatActivity extends AppCompatActivity {
 
     private void startRingtone() {
         try {
+            if (ringtonePlayer != null && ringtonePlayer.isPlaying()) return; // Avoid double play
             Uri ringtoneUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE);
             ringtonePlayer = MediaPlayer.create(this, ringtoneUri);
             ringtonePlayer.setLooping(true); 
@@ -510,6 +534,9 @@ public class ChatActivity extends AppCompatActivity {
 
     private void endCall() {
         stopRingtone(); 
+        audioManager.setMode(AudioManager.MODE_NORMAL); // Reset Audio
+        audioManager.setSpeakerphoneOn(false);
+
         callTimer.stop(); 
         callTimer.setVisibility(View.GONE);
         videoCallContainer.setVisibility(View.GONE);
@@ -526,6 +553,12 @@ public class ChatActivity extends AppCompatActivity {
         db.collection("calls").document(target).delete(); 
         db.collection("calls").document(currentUserDocId).delete();
         incomingCallerId = "";
+    }
+
+    @Override
+    protected void onStop() {
+        super.onStop();
+        stopRingtone(); // Safety stop
     }
 
     @Override
