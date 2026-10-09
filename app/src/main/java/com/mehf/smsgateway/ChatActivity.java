@@ -4,6 +4,9 @@ import android.Manifest;
 import android.content.pm.PackageManager;
 import android.graphics.Color;
 import android.graphics.drawable.GradientDrawable;
+import android.media.MediaPlayer;
+import android.media.RingtoneManager;
+import android.net.Uri;
 import android.os.Bundle;
 import android.util.Log;
 import android.view.Gravity;
@@ -71,10 +74,11 @@ public class ChatActivity extends AppCompatActivity {
     private SurfaceTextureHelper surfaceTextureHelper;
     private VideoCapturer videoCapturer;
 
-    // Incoming Call Variables
+    // Call Variables & Ringtone
     private String incomingCallerId = "";
     private String incomingSdp = "";
     private boolean isIncomingVideo = false;
+    private MediaPlayer ringtonePlayer; // Ringtone System
 
     private String currentUserDocId = ""; 
     private String currentUserName = "";
@@ -85,7 +89,6 @@ public class ChatActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_chat);
 
-        // 1. CRASH FIX: Ask Permissions FIRST
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED ||
             ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
             ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.CAMERA, Manifest.permission.RECORD_AUDIO}, 100);
@@ -147,8 +150,9 @@ public class ChatActivity extends AppCompatActivity {
         
         btnEndCall.setOnClickListener(v -> endCall());
 
-        // 2. ACCEPT / DECLINE CALL LOGIC
+        // ACCEPT CALL
         btnAcceptCall.setOnClickListener(v -> {
+            stopRingtone(); // Stop Ringtone when picked up
             incomingCallLayout.setVisibility(View.GONE);
             videoCallContainer.setVisibility(View.VISIBLE);
             
@@ -169,13 +173,36 @@ public class ChatActivity extends AppCompatActivity {
             }, new MediaConstraints());
         });
 
+        // DECLINE CALL
         btnDeclineCall.setOnClickListener(v -> {
+            stopRingtone(); // Stop Ringtone
             incomingCallLayout.setVisibility(View.GONE);
             db.collection("calls").document(currentUserDocId).delete();
         });
 
         listenForIncomingSignals();
     }
+
+    // ============ RINGTONE LOGIC ============
+    private void startRingtone() {
+        try {
+            Uri ringtoneUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE);
+            ringtonePlayer = MediaPlayer.create(this, ringtoneUri);
+            ringtonePlayer.setLooping(true); // Continuous loop
+            ringtonePlayer.start();
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+    private void stopRingtone() {
+        if (ringtonePlayer != null && ringtonePlayer.isPlaying()) {
+            ringtonePlayer.stop();
+            ringtonePlayer.release();
+            ringtonePlayer = null;
+        }
+    }
+    // ========================================
 
     private void sendMessageToFirebase(String text) {
         Map<String, Object> chatData = new HashMap<>();
@@ -375,19 +402,27 @@ public class ChatActivity extends AppCompatActivity {
     private void listenForIncomingSignals() {
         db.collection("calls").document(currentUserDocId)
           .addSnapshotListener((snapshot, e) -> {
-              if (e != null || snapshot == null || !snapshot.exists()) return;
+              // 🔴 If Caller Ends Call Before We Answer: Hide popup & Stop Ringtone
+              if (snapshot == null || !snapshot.exists()) {
+                  runOnUiThread(() -> {
+                      incomingCallLayout.setVisibility(View.GONE);
+                      stopRingtone();
+                  });
+                  return;
+              }
               
               String type = snapshot.getString("type");
               String sdpStr = snapshot.getString("sdp");
 
               if ("offer".equals(type)) {
-                  // 3. SHOW INCOMING CALL DIALOG INSTEAD OF AUTO-ANSWER
                   incomingCallerId = snapshot.getString("callerId");
                   isIncomingVideo = snapshot.getBoolean("isVideo") != null ? snapshot.getBoolean("isVideo") : true;
                   incomingSdp = sdpStr;
                   
+                  // Show Call UI & START RINGTONE
                   incomingCallLayout.setVisibility(View.VISIBLE);
                   tvIncomingCallTitle.setText((isIncomingVideo ? "📹 Video Call" : "📞 Voice Call") + "\nFrom: " + incomingCallerId);
+                  startRingtone();
                   
               } else if ("answer".equals(type)) {
                   peerConnection.setRemoteDescription(new SimpleSdpObserver(), new SessionDescription(SessionDescription.Type.ANSWER, sdpStr));
@@ -410,6 +445,7 @@ public class ChatActivity extends AppCompatActivity {
     }
 
     private void endCall() {
+        stopRingtone(); // Stop ringtone if active
         videoCallContainer.setVisibility(View.GONE);
         incomingCallLayout.setVisibility(View.GONE);
         if (peerConnection != null) { peerConnection.close(); peerConnection = null; }
