@@ -7,7 +7,9 @@ import android.graphics.Color;
 import android.os.Bundle;
 import android.text.Editable;
 import android.text.TextWatcher;
+import android.view.Gravity;
 import android.view.View;
+import android.widget.Button;
 import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
@@ -54,13 +56,46 @@ public class UsersListActivity extends AppCompatActivity {
         scrollView.addView(mainLayout);
         setContentView(scrollView);
 
+        // 1. HEADER LAYOUT (Title + Logout Button)
+        LinearLayout headerLayout = new LinearLayout(this);
+        headerLayout.setOrientation(LinearLayout.HORIZONTAL);
+        headerLayout.setGravity(Gravity.CENTER_VERTICAL);
+        headerLayout.setPadding(0, 0, 0, 30);
+
         TextView title = new TextView(this);
         title.setText("💬 Communication Hub");
-        title.setTextSize(22f);
+        title.setTextSize(20f);
         title.setTextColor(Color.parseColor("#1A237E"));
-        title.setPadding(0, 0, 0, 30);
-        mainLayout.addView(title);
+        title.getPaint().setFakeBoldText(true);
+        LinearLayout.LayoutParams titleParams = new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
+        title.setLayoutParams(titleParams);
+        headerLayout.addView(title);
 
+        // 2. LOGOUT BUTTON
+        Button btnLogout = new Button(this);
+        btnLogout.setText("LOGOUT");
+        btnLogout.setBackgroundColor(Color.parseColor("#F44336")); // Red Color
+        btnLogout.setTextColor(Color.WHITE);
+        headerLayout.addView(btnLogout);
+
+        mainLayout.addView(headerLayout);
+
+        // 3. LOGOUT BUTTON CLICK ACTION
+        btnLogout.setOnClickListener(v -> {
+            mAuth.signOut(); // Firebase se logout
+            prefs.edit().putBoolean("is_connect_user", false).apply(); // Session clear karein
+            prefs.edit().putBoolean("is_admin_active_session", false).apply();
+            
+            Toast.makeText(this, "Logged out successfully!", Toast.LENGTH_SHORT).show();
+            
+            // Wapas Login Screen par bhejein
+            Intent intent = new Intent(UsersListActivity.this, MainActivity.class);
+            intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
+            startActivity(intent);
+            finish();
+        });
+
+        // Search Box
         EditText searchBox = new EditText(this);
         searchBox.setHint("🔍 Search by Name, Role or Class...");
         searchBox.setBackgroundColor(Color.WHITE);
@@ -146,7 +181,7 @@ public class UsersListActivity extends AppCompatActivity {
         contactsLayout.addView(divider);
     }
 
-   private void filterContacts(String query) {
+    private void filterContacts(String query) {
         renderSpecialChats();
         int renderedCount = 0; 
 
@@ -159,13 +194,13 @@ public class UsersListActivity extends AppCompatActivity {
             String role = doc.contains("role") ? doc.getString("role") : "Unknown";
             String className = doc.contains("class") ? doc.getString("class") : "";
             
-            // SCHOOL ISOLATION LOGIC (सिर्फ अपने स्कूल के लोग दिखेंगे)
+            // SCHOOL ISOLATION LOGIC
             String targetSchoolId = doc.contains("schoolId") ? doc.getString("schoolId") : "NA";
             if (role.equals("school")) targetSchoolId = id; 
 
             boolean isSameSchool = false;
             if (currentUserRole.equals("admin") || role.equals("admin")) {
-                isSameSchool = true; // एडमिन सबको देख सकता है और सबको एडमिन दिखेगा
+                isSameSchool = true; 
             } else {
                 if (currentUserRole.equals("school")) {
                     isSameSchool = targetSchoolId.equals(currentUserDocId); 
