@@ -205,6 +205,7 @@ public class ChatActivity extends AppCompatActivity {
     private void listenForLiveMessages() {
         db.collection("chats")
           .orderBy("timestamp", Query.Direction.ASCENDING)
+            .limitToLast(50)
           .addSnapshotListener((snapshots, e) -> {
               if (e != null || snapshots == null) return;
               
