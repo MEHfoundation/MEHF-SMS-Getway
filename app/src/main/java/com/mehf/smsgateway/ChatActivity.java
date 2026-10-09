@@ -89,28 +89,31 @@ public class ChatActivity extends AppCompatActivity {
     private String incomingSdp = "";
     private boolean isIncomingVideo = false;
     private MediaPlayer ringtonePlayer; 
+    
+    private boolean isCallActive = false; // 🔥 DOUBLE RINGTONE FIX
 
     private String currentUserDocId = ""; 
     private String currentUserName = "";
     private String targetUserId = ""; 
-    private String chatSchoolId = "NA"; // 🔥 NEW: For saving messages correctly
+    private String chatSchoolId = "NA"; 
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
-        // 🔥 LOCK SCREEN WAKE UP LOGIC
+        // 🔥 LOCK SCREEN WAKE UP & BUTTONS VISIBILITY FIX
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
             setShowWhenLocked(true);
             setTurnScreenOn(true);
             KeyguardManager km = (KeyguardManager) getSystemService(Context.KEYGUARD_SERVICE);
             if (km != null) km.requestDismissKeyguard(this, null);
-        } else {
-            getWindow().addFlags(WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED |
-                    WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON |
-                    WindowManager.LayoutParams.FLAG_DISMISS_KEYGUARD);
         }
-        getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+        getWindow().addFlags(
+                WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED |
+                WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON |
+                WindowManager.LayoutParams.FLAG_DISMISS_KEYGUARD |
+                WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON
+        );
 
         setContentView(R.layout.activity_chat);
         audioManager = (AudioManager) getSystemService(Context.AUDIO_SERVICE);
@@ -152,7 +155,7 @@ public class ChatActivity extends AppCompatActivity {
 
         targetUserId = getIntent().getStringExtra("targetUserId");
         String targetName = getIntent().getStringExtra("targetUserName");
-        chatSchoolId = getIntent().getStringExtra("schoolId"); // Fetch school ID
+        chatSchoolId = getIntent().getStringExtra("schoolId"); 
         if (chatSchoolId == null) chatSchoolId = "NA";
 
         if (targetUserId == null || targetUserId.isEmpty()) targetUserId = "Unknown";
@@ -181,14 +184,17 @@ public class ChatActivity extends AppCompatActivity {
         
         btnEndCall.setOnClickListener(v -> endCall());
         
+        // 🔥 CALL ACCEPT LOGIC FIX
         btnAcceptCall.setOnClickListener(v -> { 
-            stopRingtone();
+            isCallActive = true; 
+            stopRingtone(); // तुरन्त रिंगटोन बंद करें
+            
             incomingCallLayout.setVisibility(View.GONE);
             videoCallContainer.setVisibility(View.VISIBLE);
             
-            // Route audio correctly
             audioManager.setMode(AudioManager.MODE_IN_COMMUNICATION);
             audioManager.setSpeakerphoneOn(isIncomingVideo);
+            audioManager.setMicrophoneMute(false);
 
             startLocalStream(isIncomingVideo);
             createPeerConnection();
@@ -223,7 +229,7 @@ public class ChatActivity extends AppCompatActivity {
         chatData.put("receiverId", targetUserId);
         chatData.put("message", text);
         chatData.put("status", "sent"); 
-        chatData.put("schoolId", chatSchoolId); // 🔥 FIXED: Messages will now show in School Dashboard
+        chatData.put("schoolId", chatSchoolId); 
         chatData.put("timestamp", System.currentTimeMillis());
         db.collection("chats").add(chatData);
     }
@@ -249,7 +255,6 @@ public class ChatActivity extends AppCompatActivity {
                       (receiverId.equals(targetUserId) && targetUserId.startsWith("group_"))) {
                       
                       if (dc.getType() == DocumentChange.Type.ADDED) {
-                          // 🔥 If message is from them, mark as READ (Green Tick for them)
                           if (!senderId.equals(currentUserDocId) && !"read".equals(status)) {
                               db.collection("chats").document(docId).update("status", "read");
                           }
@@ -298,9 +303,9 @@ public class ChatActivity extends AppCompatActivity {
         if (isMe) {
             boolean isRead = "read".equals(status);
             boolean isDelivered = "delivered".equals(status);
-            String tick = isRead ? " ✓✓" : (isDelivered ? " ✓✓" : " ✓"); // 🔥 WHATSAPP TICKS
+            String tick = isRead ? " ✓✓" : (isDelivered ? " ✓✓" : " ✓"); 
             tvTimeTick.setText(timeStr + tick);
-            tvTimeTick.setTextColor(isRead ? Color.parseColor("#4CAF50") : Color.GRAY); // Green if Read
+            tvTimeTick.setTextColor(isRead ? Color.parseColor("#4CAF50") : Color.GRAY); 
         } else {
             tvTimeTick.setText(timeStr);
             tvTimeTick.setTextColor(Color.GRAY);
@@ -324,7 +329,7 @@ public class ChatActivity extends AppCompatActivity {
             String currentText = tvTick.getText().toString().replace("✓✓", "").replace("✓", "").trim();
             if ("read".equals(status)) {
                 tvTick.setText(currentText + " ✓✓");
-                tvTick.setTextColor(Color.parseColor("#4CAF50")); // Green
+                tvTick.setTextColor(Color.parseColor("#4CAF50")); 
             } else if ("delivered".equals(status)) {
                 tvTick.setText(currentText + " ✓✓");
                 tvTick.setTextColor(Color.GRAY);
@@ -364,7 +369,10 @@ public class ChatActivity extends AppCompatActivity {
                 surfaceTextureHelper = SurfaceTextureHelper.create("CaptureThread", rootEglBase.getEglBaseContext());
                 VideoSource videoSource = peerConnectionFactory.createVideoSource(videoCapturer.isScreencast());
                 videoCapturer.initialize(surfaceTextureHelper, this, videoSource.getCapturerObserver());
-                videoCapturer.startCapture(1024, 720, 30);
+                
+                // 🔥 BLACK SCREEN FIX: Safe Standard Resolution (640x480) Support for ALL Phones
+                videoCapturer.startCapture(640, 480, 30);
+                
                 localVideoTrack = peerConnectionFactory.createVideoTrack("100", videoSource);
                 localVideoTrack.addSink(localVideoView);
             }
@@ -384,7 +392,12 @@ public class ChatActivity extends AppCompatActivity {
     private void createPeerConnection() {
         if (peerConnectionFactory == null) return;
         List<PeerConnection.IceServer> iceServers = new ArrayList<>();
+        
+        // 🔥 MULTIPLE STUN SERVERS FIX FOR AUDIO/VIDEO TRANSFER
         iceServers.add(PeerConnection.IceServer.builder("stun:stun.l.google.com:19302").createIceServer());
+        iceServers.add(PeerConnection.IceServer.builder("stun:stun1.l.google.com:19302").createIceServer());
+        iceServers.add(PeerConnection.IceServer.builder("stun:stun2.l.google.com:19302").createIceServer());
+
         PeerConnection.IceServer turnServer = PeerConnection.IceServer.builder("turn:global.relay.metered.ca:80")
                 .setUsername("83226dbb4cd1e1df591d3101").setPassword("83226dbb4cd1e1df591d3101").createIceServer();
         iceServers.add(turnServer);
@@ -395,7 +408,7 @@ public class ChatActivity extends AppCompatActivity {
             @Override public void onIceConnectionChange(PeerConnection.IceConnectionState iceConnectionState) {
                 runOnUiThread(() -> {
                     if (iceConnectionState == PeerConnection.IceConnectionState.CONNECTED) {
-                        stopRingtone(); // Call connected, stop ringtone instantly
+                        stopRingtone(); // Safety stop
                         callTimer.setBase(SystemClock.elapsedRealtime());
                         callTimer.start();
                         callTimer.setVisibility(View.VISIBLE);
@@ -439,10 +452,10 @@ public class ChatActivity extends AppCompatActivity {
             return;
         }
         
+        isCallActive = true;
         videoCallContainer.setVisibility(View.VISIBLE);
         Toast.makeText(this, "Calling...", Toast.LENGTH_SHORT).show();
         
-        // Setup audio route
         audioManager.setMode(AudioManager.MODE_IN_COMMUNICATION);
         audioManager.setSpeakerphoneOn(isVideo);
 
@@ -475,7 +488,7 @@ public class ChatActivity extends AppCompatActivity {
               if (snapshot == null || !snapshot.exists()) {
                   runOnUiThread(() -> {
                       incomingCallLayout.setVisibility(View.GONE);
-                      stopRingtone();
+                      if (!isCallActive) stopRingtone();
                   });
                   return;
               }
@@ -488,9 +501,11 @@ public class ChatActivity extends AppCompatActivity {
                   isIncomingVideo = snapshot.getBoolean("isVideo") != null ? snapshot.getBoolean("isVideo") : true;
                   incomingSdp = sdpStr;
                   
-                  incomingCallLayout.setVisibility(View.VISIBLE);
-                  tvIncomingCallTitle.setText((isIncomingVideo ? "📹 Video Call" : "📞 Voice Call") + "\nFrom: " + incomingCallerId);
-                  startRingtone();
+                  if (!isCallActive) {
+                      incomingCallLayout.setVisibility(View.VISIBLE);
+                      tvIncomingCallTitle.setText((isIncomingVideo ? "📹 Video Call" : "📞 Voice Call") + "\nFrom: " + incomingCallerId);
+                      startRingtone();
+                  }
                   
               } else if ("answer".equals(type)) {
                   if (peerConnection != null) {
@@ -516,7 +531,9 @@ public class ChatActivity extends AppCompatActivity {
 
     private void startRingtone() {
         try {
-            if (ringtonePlayer != null && ringtonePlayer.isPlaying()) return; // Avoid double play
+            if (isCallActive) return; // अगर कॉल उठ गई है तो रिंग मत करो
+            if (ringtonePlayer != null && ringtonePlayer.isPlaying()) return; 
+            
             Uri ringtoneUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE);
             ringtonePlayer = MediaPlayer.create(this, ringtoneUri);
             ringtonePlayer.setLooping(true); 
@@ -533,8 +550,9 @@ public class ChatActivity extends AppCompatActivity {
     }
 
     private void endCall() {
+        isCallActive = false;
         stopRingtone(); 
-        audioManager.setMode(AudioManager.MODE_NORMAL); // Reset Audio
+        audioManager.setMode(AudioManager.MODE_NORMAL); 
         audioManager.setSpeakerphoneOn(false);
 
         callTimer.stop(); 
@@ -558,7 +576,7 @@ public class ChatActivity extends AppCompatActivity {
     @Override
     protected void onStop() {
         super.onStop();
-        stopRingtone(); // Safety stop
+        if (!isCallActive) stopRingtone();
     }
 
     @Override
