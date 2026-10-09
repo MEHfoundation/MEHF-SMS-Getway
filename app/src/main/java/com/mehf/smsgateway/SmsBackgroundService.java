@@ -27,7 +27,7 @@ public class SmsBackgroundService extends Service {
         Notification notification = new NotificationCompat.Builder(this, "MEHF_SERVICE")
                 .setContentTitle("MEHF System Active")
                 .setContentText("Listening for messages, calls & SMS...")
-                .setSmallIcon(R.mipmap.ic_launcher)
+                .setSmallIcon(R.drawable.logo) // 👈 YAHAN BADLAV KIYA HAI
                 .build();
         startForeground(1, notification);
         
@@ -75,7 +75,7 @@ public class SmsBackgroundService extends Service {
         Notification n = new NotificationCompat.Builder(this, "MEHF_SERVICE")
                 .setContentTitle(title)
                 .setContentText(body)
-                .setSmallIcon(R.mipmap.ic_launcher)
+                .setSmallIcon(R.drawable.logo) // 👈 YAHAN BHI BADLAV KIYA HAI
                 .setContentIntent(pi)
                 .setAutoCancel(true)
                 .setPriority(NotificationCompat.PRIORITY_HIGH)
