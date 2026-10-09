@@ -2,91 +2,50 @@
 <RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="#E5DDD5">
+    android:background="#F4F6F9">
 
     <!-- Header -->
     <LinearLayout
-        android:id="@+id/headerLayout"
+        android:id="@+id/chatHeader"
         android:layout_width="match_parent"
-        android:layout_height="60dp"
-        android:background="#0F2BEB"
-        android:gravity="center_vertical"
+        android:layout_height="wrap_content"
+        android:background="#1A237E"
+        android:padding="15dp"
         android:orientation="horizontal"
-        android:padding="10dp">
-        
+        android:gravity="center_vertical">
         <TextView
-            android:id="@+id/chatTitle"
+            android:id="@+id/tvChatTitle"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:text="MEHF Chat Hub"
-            android:textColor="#FFFFFF"
+            android:text="Chat"
+            android:textColor="#FFF"
             android:textSize="18sp"
             android:textStyle="bold" />
-
-        <!-- Custom WebRTC Buttons -->
         <ImageButton
             android:id="@+id/btnVoiceCall"
             android:layout_width="40dp"
             android:layout_height="40dp"
-            android:layout_marginRight="10dp"
             android:background="?attr/selectableItemBackground"
             android:src="@android:drawable/ic_btn_speak_now"
-            android:tint="#FFFFFF" />
-
+            android:tint="#FFF"/>
         <ImageButton
             android:id="@+id/btnVideoCall"
             android:layout_width="40dp"
             android:layout_height="40dp"
             android:background="?attr/selectableItemBackground"
-            android:src="@android:drawable/ic_menu_camera"
-            android:tint="#FFFFFF" />
+            android:src="@android:drawable/presence_video_online"
+            android:tint="#FFF"/>
     </LinearLayout>
 
-    <!-- WebRTC Video Container (कॉल आने पर दिखेगा) -->
-    <RelativeLayout
-        android:id="@+id/videoCallContainer"
-        android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:layout_below="@id/headerLayout"
-        android:visibility="gone"
-        android:background="#000000"
-        android:elevation="10dp">
-
-        <org.webrtc.SurfaceViewRenderer
-            android:id="@+id/remoteVideoView"
-            android:layout_width="match_parent"
-            android:layout_height="match_parent" />
-
-        <org.webrtc.SurfaceViewRenderer
-            android:id="@+id/localVideoView"
-            android:layout_width="120dp"
-            android:layout_height="160dp"
-            android:layout_alignParentBottom="true"
-            android:layout_alignParentRight="true"
-            android:layout_margin="20dp" />
-
-        <Button
-            android:id="@+id/btnEndCall"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_alignParentBottom="true"
-            android:layout_centerHorizontal="true"
-            android:layout_marginBottom="30dp"
-            android:backgroundTint="#D32F2F"
-            android:text="End Call"
-            android:textColor="#FFFFFF" />
-    </RelativeLayout>
-
-    <!-- Chat Messages Area -->
+    <!-- Chat Area -->
     <ScrollView
         android:id="@+id/chatScrollView"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
+        android:layout_below="@id/chatHeader"
         android:layout_above="@id/inputLayout"
-        android:layout_below="@id/headerLayout"
         android:padding="10dp">
-        
         <LinearLayout
             android:id="@+id/chatListLayout"
             android:layout_width="match_parent"
@@ -94,32 +53,108 @@
             android:orientation="vertical" />
     </ScrollView>
 
-    <!-- Type Message Box -->
+    <!-- Input Area -->
     <LinearLayout
         android:id="@+id/inputLayout"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_alignParentBottom="true"
-        android:background="#F0F0F0"
-        android:orientation="horizontal"
-        android:padding="10dp">
-
+        android:background="#FFF"
+        android:padding="10dp"
+        android:elevation="10dp"
+        android:orientation="horizontal">
         <EditText
             android:id="@+id/etMessage"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:background="@android:color/white"
-            android:hint="मैसेज टाइप करें..."
-            android:padding="12dp" />
-
+            android:hint="Type message..."
+            android:background="@android:color/transparent"
+            android:padding="10dp" />
         <Button
             android:id="@+id/btnSend"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginLeft="10dp"
+            android:text="Send 🚀"
             android:backgroundTint="#0F2BEB"
-            android:text="भेजें"
-            android:textColor="#FFFFFF" />
+            android:textColor="#FFF" />
     </LinearLayout>
+
+    <!-- Incoming Call Overlay -->
+    <LinearLayout
+        android:id="@+id/incomingCallLayout"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_alignParentTop="true"
+        android:layout_marginTop="80dp"
+        android:layout_marginHorizontal="20dp"
+        android:background="#FFF"
+        android:elevation="15dp"
+        android:orientation="vertical"
+        android:padding="20dp"
+        android:visibility="gone">
+        <TextView
+            android:id="@+id/tvIncomingCallTitle"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Incoming Call..."
+            android:textSize="18sp"
+            android:textColor="#000"
+            android:textStyle="bold"
+            android:gravity="center"
+            android:layout_marginBottom="20dp"/>
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal">
+            <Button
+                android:id="@+id/btnDeclineCall"
+                android:layout_width="0dp"
+                android:layout_weight="1"
+                android:layout_height="wrap_content"
+                android:text="DECLINE ❌"
+                android:backgroundTint="#F44336"
+                android:textColor="#FFF"
+                android:layout_marginEnd="10dp"/>
+            <Button
+                android:id="@+id/btnAcceptCall"
+                android:layout_width="0dp"
+                android:layout_weight="1"
+                android:layout_height="wrap_content"
+                android:text="ACCEPT 📞"
+                android:backgroundTint="#4CAF50"
+                android:textColor="#FFF" />
+        </LinearLayout>
+    </LinearLayout>
+
+    <!-- Video Call Container -->
+    <RelativeLayout
+        android:id="@+id/videoCallContainer"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="#000"
+        android:elevation="20dp"
+        android:visibility="gone">
+        <org.webrtc.SurfaceViewRenderer
+            android:id="@+id/remoteVideoView"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent" />
+        <org.webrtc.SurfaceViewRenderer
+            android:id="@+id/localVideoView"
+            android:layout_width="120dp"
+            android:layout_height="160dp"
+            android:layout_alignParentBottom="true"
+            android:layout_alignParentRight="true"
+            android:layout_margin="20dp" />
+        <Button
+            android:id="@+id/btnEndCall"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_alignParentBottom="true"
+            android:layout_centerHorizontal="true"
+            android:layout_marginBottom="30dp"
+            android:text="END CALL 🔴"
+            android:backgroundTint="#F44336"
+            android:textColor="#FFF" />
+    </RelativeLayout>
 </RelativeLayout>
