@@ -32,7 +32,12 @@
             </intent-filter>
         </activity>
 
-        <!-- Naya: Chat Screen Activity (Jise hum agle step me banayenge) -->
+        <!-- Nayi: Users List Activity (Chat Hub kholne ke liye) -->
+        <activity 
+            android:name=".UsersListActivity" 
+            android:exported="false" />
+
+        <!-- Naya: Chat Screen Activity -->
         <activity 
             android:name=".ChatActivity" 
             android:exported="false" />
