@@ -2,26 +2,30 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="com.mehf.smsgateway">
 
-    <!-- Aapki Purani SMS Gateway Permissions -->
-    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
-    <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
-    <uses-permission android:name="android.permission.DISABLE_KEYGUARD" />
-    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
-    <uses-permission android:name="android.permission.SEND_SMS" />
-    <uses-permission android:name="android.permission.READ_PHONE_STATE" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
-    <uses-permission android:name="android.permission.WAKE_LOCK" />
-    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
-    
-    <!-- Nayi: Chat, Call aur Internet Permissions -->
+    <!-- 1. Internet & Network -->
     <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+
+    <!-- 2. Calling & Media (WebRTC) -->
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
-    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+
+    <!-- 3. SMS & Phone State -->
+    <uses-permission android:name="android.permission.SEND_SMS" />
+    <uses-permission android:name="android.permission.READ_PHONE_STATE" />
+
+    <!-- 4. Background & Lock Screen Wake Up -->
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.DISABLE_KEYGUARD" />
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+    <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
+
+    <!-- 5. Services & Notifications (Android 14/15 Support) -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
 
     <application
         android:allowBackup="true"
@@ -29,9 +33,9 @@
         android:label="MEHF Communication"
         android:theme="@style/Theme.AppCompat.Light.NoActionBar">
         
+        <!-- Main Activity (Login Page) -->
         <activity
             android:name=".MainActivity"
-            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden"
             android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
@@ -39,23 +43,26 @@
             </intent-filter>
         </activity>
 
-        <!-- Nayi: Users List Activity (Chat Hub kholne ke liye) -->
+        <!-- Users List Activity (Chat Hub) -->
         <activity 
             android:name=".UsersListActivity" 
             android:exported="false" />
 
-        <!-- Naya: Chat Screen Activity -->
+        <!-- 🔥 CRITICAL FIX: ChatActivity (Yahan par Rotation aur Lock Screen ka code aayega) -->
         <activity 
             android:name=".ChatActivity" 
+            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden"
+            android:showWhenLocked="true"
+            android:turnScreenOn="true"
             android:exported="false" />
 
-        <!-- Aapka Purana Background SMS Service -->
+        <!-- Background SMS & Call Listener Service -->
         <service
             android:name=".SmsBackgroundService"
             android:exported="false"
             android:foregroundServiceType="dataSync" />
 
-        <!-- Aapka Purana Receiver -->
+        <!-- SMS Result Receiver -->
         <receiver 
             android:name=".MainActivity$SmsResultReceiver" 
             android:exported="true">
