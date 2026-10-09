@@ -23,7 +23,10 @@ import com.google.firebase.firestore.DocumentSnapshot;
 import com.google.firebase.firestore.FirebaseFirestore;
 
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 public class UsersListActivity extends AppCompatActivity {
 
@@ -37,6 +40,10 @@ public class UsersListActivity extends AppCompatActivity {
     
     private LinearLayout contactsLayout;
     private List<DocumentSnapshot> allUsersCache = new ArrayList<>();
+    private EditText searchBox;
+
+    private Map<String, Long> latestMessageTimeMap = new HashMap<>();
+    private Map<String, Integer> unreadCountMap = new HashMap<>();
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -46,7 +53,6 @@ public class UsersListActivity extends AppCompatActivity {
         mAuth = FirebaseAuth.getInstance();
         prefs = getSharedPreferences("MEHF_Prefs", Context.MODE_PRIVATE);
 
-        // UI Setup
         ScrollView scrollView = new ScrollView(this);
         scrollView.setBackgroundColor(Color.parseColor("#F4F6F9"));
         
@@ -56,7 +62,6 @@ public class UsersListActivity extends AppCompatActivity {
         scrollView.addView(mainLayout);
         setContentView(scrollView);
 
-        // 1. HEADER LAYOUT (Title + Logout Button)
         LinearLayout headerLayout = new LinearLayout(this);
         headerLayout.setOrientation(LinearLayout.HORIZONTAL);
         headerLayout.setGravity(Gravity.CENTER_VERTICAL);
@@ -71,32 +76,24 @@ public class UsersListActivity extends AppCompatActivity {
         title.setLayoutParams(titleParams);
         headerLayout.addView(title);
 
-        // 2. LOGOUT BUTTON
         Button btnLogout = new Button(this);
         btnLogout.setText("LOGOUT");
-        btnLogout.setBackgroundColor(Color.parseColor("#F44336")); // Red Color
+        btnLogout.setBackgroundColor(Color.parseColor("#F44336")); 
         btnLogout.setTextColor(Color.WHITE);
         headerLayout.addView(btnLogout);
-
         mainLayout.addView(headerLayout);
 
-        // 3. LOGOUT BUTTON CLICK ACTION
         btnLogout.setOnClickListener(v -> {
-            mAuth.signOut(); // Firebase se logout
-            prefs.edit().putBoolean("is_connect_user", false).apply(); // Session clear karein
+            mAuth.signOut();
+            prefs.edit().putBoolean("is_connect_user", false).apply(); 
             prefs.edit().putBoolean("is_admin_active_session", false).apply();
-            
-            Toast.makeText(this, "Logged out successfully!", Toast.LENGTH_SHORT).show();
-            
-            // Wapas Login Screen par bhejein
             Intent intent = new Intent(UsersListActivity.this, MainActivity.class);
             intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
             startActivity(intent);
             finish();
         });
 
-        // Search Box
-        EditText searchBox = new EditText(this);
+        searchBox = new EditText(this);
         searchBox.setHint("🔍 Search by Name, Role or Class...");
         searchBox.setBackgroundColor(Color.WHITE);
         searchBox.setPadding(30, 30, 30, 30);
@@ -118,28 +115,23 @@ public class UsersListActivity extends AppCompatActivity {
 
     private void fetchCurrentUserRoleAndLoadContacts() {
         FirebaseUser user = mAuth.getCurrentUser();
-        if (user == null) {
-            finish();
-            return;
-        }
+        if (user == null) { finish(); return; }
 
-        if (user.getEmail() != null) {
-            currentUserDocId = user.getEmail().split("@")[0];
-        } else {
-            currentUserDocId = user.getUid();
-        }
-
+        currentUserDocId = user.getEmail() != null ? user.getEmail().split("@")[0] : user.getUid();
         boolean isAdmin = prefs.getBoolean("is_admin_active_session", false);
 
         if (isAdmin) {
             currentUserRole = "admin";
             currentUserSchoolId = "NA";
+            listenForRecentChatsAndSort();
             loadContactsFromFirestore();
         } else {
             db.collection("users").document(currentUserDocId).get().addOnSuccessListener(doc -> {
                 if (doc.exists()) {
                     currentUserRole = doc.contains("role") ? doc.getString("role") : "student";
                     currentUserSchoolId = doc.contains("schoolId") ? doc.getString("schoolId") : "NA";
+                    if(currentUserRole.equals("school")) currentUserSchoolId = currentUserDocId; // School ID logic
+                    listenForRecentChatsAndSort(); 
                     loadContactsFromFirestore();
                 } else {
                     Toast.makeText(this, "Profile Data Error!", Toast.LENGTH_SHORT).show();
@@ -148,65 +140,95 @@ public class UsersListActivity extends AppCompatActivity {
         }
     }
 
+    private void listenForRecentChatsAndSort() {
+        db.collection("chats")
+          .whereEqualTo("receiverId", currentUserDocId)
+          .addSnapshotListener((snaps, e) -> {
+              if (snaps != null) {
+                  unreadCountMap.clear();
+                  for (DocumentSnapshot doc : snaps.getDocuments()) {
+                      String sender = doc.getString("senderId");
+                      String status = doc.getString("status");
+                      Long time = doc.getLong("timestamp");
+
+                      if ("sent".equals(status) || "delivered".equals(status)) {
+                          unreadCountMap.put(sender, unreadCountMap.getOrDefault(sender, 0) + 1);
+                      }
+                      if (time != null) {
+                          long savedTime = latestMessageTimeMap.getOrDefault(sender, 0L);
+                          if (time > savedTime) latestMessageTimeMap.put(sender, time);
+                      }
+                  }
+                  if (!allUsersCache.isEmpty()) filterContacts(searchBox.getText().toString().toLowerCase());
+              }
+          });
+
+        db.collection("chats")
+          .whereEqualTo("senderId", currentUserDocId)
+          .addSnapshotListener((snaps, e) -> {
+               if (snaps != null) {
+                  for (DocumentSnapshot doc : snaps.getDocuments()) {
+                      String receiver = doc.getString("receiverId");
+                      Long time = doc.getLong("timestamp");
+                      if (time != null) {
+                          long savedTime = latestMessageTimeMap.getOrDefault(receiver, 0L);
+                          if (time > savedTime) latestMessageTimeMap.put(receiver, time);
+                      }
+                  }
+                  if (!allUsersCache.isEmpty()) filterContacts(searchBox.getText().toString().toLowerCase());
+              }
+          });
+    }
+
     private void loadContactsFromFirestore() {
         db.collection("users").get().addOnSuccessListener(queryDocumentSnapshots -> {
             allUsersCache.clear();
             allUsersCache.addAll(queryDocumentSnapshots.getDocuments());
-            renderSpecialChats();
             filterContacts(""); 
         });
     }
 
-    private void renderSpecialChats() {
+    private void filterContacts(String query) {
         contactsLayout.removeAllViews();
         
-        addContactCard("AI", "🤖 Smart AI Assistant", "Instant Help & Queries", "#fff0f5", "#E91E63");
-        addContactCard("group_all", "📢 School Notice Board", "Official Announcements", "#e8f5e9", "#4CAF50");
+        addContactCard("AI", "🤖 Smart AI Assistant", "Instant Help & Queries", "#fff0f5", 0);
+        addContactCard("group_all", "📢 School Notice Board", "Official Announcements", "#e8f5e9", 0);
 
         if (!currentUserRole.equals("admin") && !currentUserRole.equals("school")) {
-            addContactCard(currentUserSchoolId, "🏫 School Office", "Principal / Management", "#fff8e1", "#FF9800");
+            addContactCard(currentUserSchoolId, "🏫 School Office", "Principal / Management", "#fff8e1", unreadCountMap.getOrDefault(currentUserSchoolId, 0));
         }
 
-        if (currentUserRole.equals("student") || currentUserRole.equals("school")) {
-            addContactCard("group_student_all", "👨‍🎓 Student Broadcast", "Message to all students", "#e3f2fd", "#2196F3");
-        }
-        if (currentUserRole.equals("teacher") || currentUserRole.equals("school")) {
-            addContactCard("group_teachers", "👨‍🏫 Teacher Broadcast", "Staff Communication", "#f3e5f5", "#9C27B0");
-        }
-        
         TextView divider = new TextView(this);
-        divider.setText("\n📌 Registered Users:");
+        divider.setText("\n📌 Recent Chats & Users:");
         divider.setTextSize(16f);
         divider.setTextColor(Color.GRAY);
         contactsLayout.addView(divider);
-    }
 
-    private void filterContacts(String query) {
-        renderSpecialChats();
+        Collections.sort(allUsersCache, (u1, u2) -> {
+            long t1 = latestMessageTimeMap.getOrDefault(u1.getId(), 0L);
+            long t2 = latestMessageTimeMap.getOrDefault(u2.getId(), 0L);
+            return Long.compare(t2, t1); 
+        });
+
         int renderedCount = 0; 
-
         for (DocumentSnapshot doc : allUsersCache) {
             String id = doc.getId();
             if (id.equals(currentUserDocId)) continue; 
+            if (id.equals(currentUserSchoolId) && !currentUserRole.equals("admin")) continue; 
 
             String name = doc.contains("name") ? doc.getString("name") : 
                          (doc.contains("school_name") ? doc.getString("school_name") : id);
             String role = doc.contains("role") ? doc.getString("role") : "Unknown";
             String className = doc.contains("class") ? doc.getString("class") : "";
             
-            // SCHOOL ISOLATION LOGIC
             String targetSchoolId = doc.contains("schoolId") ? doc.getString("schoolId") : "NA";
             if (role.equals("school")) targetSchoolId = id; 
 
             boolean isSameSchool = false;
-            if (currentUserRole.equals("admin") || role.equals("admin")) {
-                isSameSchool = true; 
-            } else {
-                if (currentUserRole.equals("school")) {
-                    isSameSchool = targetSchoolId.equals(currentUserDocId); 
-                } else {
-                    isSameSchool = targetSchoolId.equals(currentUserSchoolId);
-                }
+            if (currentUserRole.equals("admin") || role.equals("admin")) { isSameSchool = true; } 
+            else {
+                if (currentUserRole.equals("school")) { isSameSchool = targetSchoolId.equals(currentUserDocId); } 
+                else { isSameSchool = targetSchoolId.equals(currentUserSchoolId); }
             }
 
             boolean show = false;
@@ -221,11 +243,13 @@ public class UsersListActivity extends AppCompatActivity {
                 String searchString = (name + " " + role + " " + className).toLowerCase();
                 if (query.isEmpty() || searchString.contains(query)) {
                     String subtext = "Role: " + role.toUpperCase() + (!className.isEmpty() ? " | Class: " + className : "");
-                    addContactCard(id, name, subtext, "#FFFFFF", "#0F2BEB");
+                    int unread = unreadCountMap.getOrDefault(id, 0); 
+                    
+                    addContactCard(id, name, subtext, "#FFFFFF", unread);
                     renderedCount++;
 
                     if (query.isEmpty() && renderedCount >= 30) {
-                        addContactCard("", "🔍 Search to find more...", "Type name to see remaining users", "#F5F5F5", "#9E9E9E");
+                        addContactCard("", "🔍 Search to find more...", "Type name to see remaining users", "#F5F5F5", 0);
                         break; 
                     }
                 }
@@ -233,11 +257,12 @@ public class UsersListActivity extends AppCompatActivity {
         }
     }
 
-    private void addContactCard(String targetId, String title, String subtitle, String bgColor, String stripColor) {
+    private void addContactCard(String targetId, String title, String subtitle, String bgColor, int unreadCount) {
         LinearLayout card = new LinearLayout(this);
-        card.setOrientation(LinearLayout.VERTICAL);
+        card.setOrientation(LinearLayout.HORIZONTAL);
         card.setBackgroundColor(Color.parseColor(bgColor));
         card.setPadding(30, 20, 30, 20);
+        card.setGravity(Gravity.CENTER_VERTICAL);
         
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
@@ -245,19 +270,41 @@ public class UsersListActivity extends AppCompatActivity {
         card.setLayoutParams(params);
         card.setElevation(5f);
 
+        LinearLayout textLayout = new LinearLayout(this);
+        textLayout.setOrientation(LinearLayout.VERTICAL);
+        LinearLayout.LayoutParams textParams = new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
+        textLayout.setLayoutParams(textParams);
+
         TextView tvTitle = new TextView(this);
         tvTitle.setText(title);
         tvTitle.setTextSize(16f);
         tvTitle.setTextColor(Color.BLACK);
         tvTitle.getPaint().setFakeBoldText(true);
-        card.addView(tvTitle);
+        textLayout.addView(tvTitle);
 
         if (!subtitle.isEmpty()) {
             TextView tvSub = new TextView(this);
             tvSub.setText(subtitle);
             tvSub.setTextSize(12f);
             tvSub.setTextColor(Color.parseColor("#666666"));
-            card.addView(tvSub);
+            textLayout.addView(tvSub);
+        }
+        card.addView(textLayout);
+
+        if (unreadCount > 0) {
+            TextView tvBadge = new TextView(this);
+            tvBadge.setText(String.valueOf(unreadCount));
+            tvBadge.setTextColor(Color.WHITE);
+            tvBadge.setTextSize(12f);
+            tvBadge.setGravity(Gravity.CENTER);
+            tvBadge.setPadding(15, 5, 15, 5);
+            
+            GradientDrawable badgeShape = new GradientDrawable();
+            badgeShape.setShape(GradientDrawable.OVAL);
+            badgeShape.setColor(Color.parseColor("#25D366")); 
+            tvBadge.setBackground(badgeShape);
+            
+            card.addView(tvBadge);
         }
 
         if(!targetId.isEmpty()) {
@@ -265,6 +312,7 @@ public class UsersListActivity extends AppCompatActivity {
                 Intent intent = new Intent(this, ChatActivity.class);
                 intent.putExtra("targetUserId", targetId);
                 intent.putExtra("targetUserName", title);
+                intent.putExtra("schoolId", currentUserSchoolId); // 🔥 FIXED: Pass school ID for messages!
                 startActivity(intent);
             });
         }
