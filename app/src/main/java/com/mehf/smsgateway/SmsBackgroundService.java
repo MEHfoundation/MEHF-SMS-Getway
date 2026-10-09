@@ -152,12 +152,24 @@ public class SmsBackgroundService extends Service implements TextToSpeech.OnInit
         }
     }
 
-    @Override public IBinder onBind(Intent intent) { return null; }
-    @Override public void onDestroy() { if (tts != null) tts.shutdown(); super.onDestroy(); }
+    @Override 
+    public IBinder onBind(Intent intent) { 
+        return null; 
+    }
+    
+    @Override 
+    public void onDestroy() { 
+        if (tts != null) tts.shutdown(); 
+        super.onDestroy(); 
+    }
+
     @Override
-public void onTaskRemoved(Intent rootIntent) {
-    super.onTaskRemoved(rootIntent);
-    // ऐप के बैकग्राउंड से उड़ने पर कैमरे को तुरंत आज़ाद करें
-    stopForeground(true);
-    stopSelf();
-}
+    public void onTaskRemoved(Intent rootIntent) {
+        super.onTaskRemoved(rootIntent);
+        // ऐप के बैकग्राउंड से उड़ने पर कैमरे को तुरंत आज़ाद करें
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            stopForeground(true);
+        }
+        stopSelf();
+    }
+} // 👈 यह वाला ब्रैकेट मिस हो गया था!
