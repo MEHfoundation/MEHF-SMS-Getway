@@ -202,10 +202,11 @@ public class ChatActivity extends AppCompatActivity {
         db.collection("chats").add(chatData);
     }
 
+    // 🔥 LIMIT SAVER & TICKS LOGIC
     private void listenForLiveMessages() {
         db.collection("chats")
           .orderBy("timestamp", Query.Direction.ASCENDING)
-            .limitToLast(50)
+          .limitToLast(50) // 🔥 Firebase Quota Saver
           .addSnapshotListener((snapshots, e) -> {
               if (e != null || snapshots == null) return;
               
@@ -302,7 +303,9 @@ public class ChatActivity extends AppCompatActivity {
         }
     }
 
-    private void fetchAIReply(String userText) { /* Code Same */ }
+    private void fetchAIReply(String userText) {
+        // AI Logic same as before...
+    }
 
     private void initWebRTC() {
         try {
@@ -325,7 +328,7 @@ public class ChatActivity extends AppCompatActivity {
                     .setVideoDecoderFactory(new org.webrtc.DefaultVideoDecoderFactory(rootEglBase.getEglBaseContext()))
                     .setVideoEncoderFactory(new org.webrtc.DefaultVideoEncoderFactory(rootEglBase.getEglBaseContext(), true, true))
                     .createPeerConnectionFactory();
-        } catch (Exception e) {}
+        } catch (Exception e) { Log.e("WebRTC", "Setup Error", e); }
     }
 
     private void startLocalStream(boolean isVideo) {
@@ -356,17 +359,25 @@ public class ChatActivity extends AppCompatActivity {
     private void createPeerConnection() {
         if (peerConnectionFactory == null) return;
         List<PeerConnection.IceServer> iceServers = new ArrayList<>();
+        
+        // 1. Google Free STUN
         iceServers.add(PeerConnection.IceServer.builder("stun:stun.l.google.com:19302").createIceServer());
+        
+        // 2. 🔥 Free TURN Server (For Anti-Black Screen on 5G/LTE)
+        PeerConnection.IceServer turnServer = PeerConnection.IceServer.builder("turn:global.relay.metered.ca:80")
+                .setUsername("83226dbb4cd1e1df591d3101")
+                .setPassword("83226dbb4cd1e1df591d3101")
+                .createIceServer();
+        iceServers.add(turnServer);
 
         PeerConnection.RTCConfiguration rtcConfig = new PeerConnection.RTCConfiguration(iceServers);
         peerConnection = peerConnectionFactory.createPeerConnection(rtcConfig, new PeerConnection.Observer() {
             @Override public void onSignalingChange(PeerConnection.SignalingState signalingState) {}
             
-            // 🔥 NETWORK CONNECTION CHECK & TIMER LOGIC
+            // 🔥 CALL TIMER & NETWORK STATUS
             @Override public void onIceConnectionChange(PeerConnection.IceConnectionState iceConnectionState) {
                 runOnUiThread(() -> {
                     if (iceConnectionState == PeerConnection.IceConnectionState.CONNECTED) {
-                        // Starts Timer when call connects
                         callTimer.setBase(SystemClock.elapsedRealtime());
                         callTimer.start();
                         callTimer.setVisibility(View.VISIBLE);
@@ -499,7 +510,7 @@ public class ChatActivity extends AppCompatActivity {
 
     private void endCall() {
         stopRingtone(); 
-        callTimer.stop(); // Stop Timer
+        callTimer.stop(); 
         callTimer.setVisibility(View.GONE);
         videoCallContainer.setVisibility(View.GONE);
         incomingCallLayout.setVisibility(View.GONE);
