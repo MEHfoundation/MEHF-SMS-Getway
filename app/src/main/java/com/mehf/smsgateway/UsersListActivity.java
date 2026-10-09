@@ -55,7 +55,7 @@ public class UsersListActivity extends AppCompatActivity {
         setContentView(scrollView);
 
         TextView title = new TextView(this);
-        title.setText("💬 Smart Communication Hub");
+        title.setText("💬 Communication Hub");
         title.setTextSize(22f);
         title.setTextColor(Color.parseColor("#1A237E"));
         title.setPadding(0, 0, 0, 30);
@@ -88,7 +88,12 @@ public class UsersListActivity extends AppCompatActivity {
             return;
         }
 
-        currentUserDocId = user.getEmail().split("@")[0];
+        if (user.getEmail() != null) {
+            currentUserDocId = user.getEmail().split("@")[0];
+        } else {
+            currentUserDocId = user.getUid();
+        }
+
         boolean isAdmin = prefs.getBoolean("is_admin_active_session", false);
 
         if (isAdmin) {
@@ -120,18 +125,13 @@ public class UsersListActivity extends AppCompatActivity {
     private void renderSpecialChats() {
         contactsLayout.removeAllViews();
         
-        // 1. AI Assistant (Sabke liye)
         addContactCard("AI", "🤖 Smart AI Assistant", "Instant Help & Queries", "#fff0f5", "#E91E63");
-
-        // 2. Notice Board (Sabke liye)
         addContactCard("group_all", "📢 School Notice Board", "Official Announcements", "#e8f5e9", "#4CAF50");
 
-        // 3. School Office (Students aur Teachers ke liye)
         if (!currentUserRole.equals("admin") && !currentUserRole.equals("school")) {
-            addContactCard(currentUserSchoolId, "🏫 School Office (Admin)", "Principal / Management", "#fff8e1", "#FF9800");
+            addContactCard(currentUserSchoolId, "🏫 School Office", "Principal / Management", "#fff8e1", "#FF9800");
         }
 
-        // 4. Role Based Broadcasts
         if (currentUserRole.equals("student") || currentUserRole.equals("school")) {
             addContactCard("group_student_all", "👨‍🎓 Student Broadcast", "Message to all students", "#e3f2fd", "#2196F3");
         }
@@ -147,8 +147,9 @@ public class UsersListActivity extends AppCompatActivity {
     }
 
     private void filterContacts(String query) {
-        // Pehle special chats render karein taaki list reset ho jaye
         renderSpecialChats();
+
+        int renderedCount = 0; // MAGIC FIX: App crash ko rokne ke liye counter
 
         for (DocumentSnapshot doc : allUsersCache) {
             String id = doc.getId();
@@ -159,7 +160,6 @@ public class UsersListActivity extends AppCompatActivity {
             String role = doc.contains("role") ? doc.getString("role") : "Unknown";
             String className = doc.contains("class") ? doc.getString("class") : "";
             
-            // Visibility Logic based on role
             boolean show = false;
             if (currentUserRole.equals("admin")) show = true;
             else if (currentUserRole.equals("school") && (role.equals("teacher") || role.equals("student") || role.equals("driver"))) show = true;
@@ -171,6 +171,13 @@ public class UsersListActivity extends AppCompatActivity {
                 if (query.isEmpty() || searchString.contains(query)) {
                     String subtext = "Role: " + role.toUpperCase() + (!className.isEmpty() ? " | Class: " + className : "");
                     addContactCard(id, name, subtext, "#FFFFFF", "#0F2BEB");
+                    renderedCount++;
+
+                    // 🚀 CRASH FIX: Bina search kiye 1000 users ek sath screen par load karne se rokta hai
+                    if (query.isEmpty() && renderedCount >= 30) {
+                        addContactCard("", "🔍 Search to find more...", "Type name to see remaining users", "#F5F5F5", "#9E9E9E");
+                        break; 
+                    }
                 }
             }
         }
@@ -186,10 +193,7 @@ public class UsersListActivity extends AppCompatActivity {
                 LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
         params.setMargins(0, 10, 0, 10);
         card.setLayoutParams(params);
-        
-        // Left color strip effect
         card.setElevation(5f);
-        card.setTranslationZ(5f);
 
         TextView tvTitle = new TextView(this);
         tvTitle.setText(title);
@@ -206,13 +210,14 @@ public class UsersListActivity extends AppCompatActivity {
             card.addView(tvSub);
         }
 
-        card.setOnClickListener(v -> {
-            Intent intent = new Intent(this, ChatActivity.class);
-            intent.putExtra("targetUserId", targetId);
-            intent.putExtra("targetUserName", title);
-            startActivity(intent);
-        });
-
+        if(!targetId.isEmpty()) {
+            card.setOnClickListener(v -> {
+                Intent intent = new Intent(this, ChatActivity.class);
+                intent.putExtra("targetUserId", targetId);
+                intent.putExtra("targetUserName", title);
+                startActivity(intent);
+            });
+        }
         contactsLayout.addView(card);
     }
 }
