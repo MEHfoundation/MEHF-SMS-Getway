@@ -6,6 +6,7 @@ import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.app.Service;
 import android.content.Intent;
+import android.content.pm.ServiceInfo;
 import android.os.Build;
 import android.os.IBinder;
 import android.speech.tts.TextToSpeech;
@@ -32,7 +33,13 @@ public class SmsBackgroundService extends Service implements TextToSpeech.OnInit
                 .setContentText("Listening for messages & calls...")
                 .setSmallIcon(R.drawable.logo)
                 .build();
-        startForeground(1, notification);
+        
+        // 🔥 ANDROID 14/15/16 CRASH FIX: Specifying Foreground Service Type
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            startForeground(1, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC);
+        } else {
+            startForeground(1, notification);
+        }
         
         listenForNewChatsAndCalls();
     }
@@ -57,7 +64,6 @@ public class SmsBackgroundService extends Service implements TextToSpeech.OnInit
         
         String myId = user.getEmail() != null ? user.getEmail().split("@")[0] : user.getUid();
         
-        // 1. Message Listener (For Delivered Ticks & TTS)
         FirebaseFirestore.getInstance().collection("chats")
             .whereEqualTo("receiverId", myId)
             .addSnapshotListener((snaps, e) -> {
@@ -66,7 +72,6 @@ public class SmsBackgroundService extends Service implements TextToSpeech.OnInit
                     String docId = dc.getDocument().getId();
                     String status = dc.getDocument().getString("status");
                     
-                    // 🔥 TICK LOGIC: Update to 'Delivered' in Background
                     if ("sent".equals(status)) {
                         FirebaseFirestore.getInstance().collection("chats").document(docId).update("status", "delivered");
                     }
@@ -84,7 +89,6 @@ public class SmsBackgroundService extends Service implements TextToSpeech.OnInit
                 }
             });
 
-         // 2. Call Listener (For Waking Screen)
          FirebaseFirestore.getInstance().collection("calls")
             .document(myId)
             .addSnapshotListener((snap, e) -> {
@@ -92,7 +96,6 @@ public class SmsBackgroundService extends Service implements TextToSpeech.OnInit
                 if ("offer".equals(snap.getString("type"))) {
                     String caller = snap.getString("callerId");
                     
-                    // 🔥 WAKE SCREEN INTENT
                     Intent intent = new Intent(this, ChatActivity.class);
                     intent.putExtra("targetUserId", caller);
                     intent.putExtra("targetUserName", caller);
@@ -140,7 +143,6 @@ public class SmsBackgroundService extends Service implements TextToSpeech.OnInit
                 NotificationChannel msgChannel = new NotificationChannel("MEHF_SERVICE", "MEHF Messages", NotificationManager.IMPORTANCE_HIGH);
                 nm.createNotificationChannel(msgChannel);
                 
-                // 🔥 SILENT CALL CHANNEL (To prevent double ringing)
                 NotificationChannel callChannel = new NotificationChannel("MEHF_CALL_CHANNEL", "Incoming Calls", NotificationManager.IMPORTANCE_HIGH);
                 callChannel.setSound(null, null); 
                 callChannel.enableVibration(true);
