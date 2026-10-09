@@ -146,10 +146,9 @@ public class UsersListActivity extends AppCompatActivity {
         contactsLayout.addView(divider);
     }
 
-    private void filterContacts(String query) {
+   private void filterContacts(String query) {
         renderSpecialChats();
-
-        int renderedCount = 0; // MAGIC FIX: App crash ko rokne ke liye counter
+        int renderedCount = 0; 
 
         for (DocumentSnapshot doc : allUsersCache) {
             String id = doc.getId();
@@ -160,11 +159,28 @@ public class UsersListActivity extends AppCompatActivity {
             String role = doc.contains("role") ? doc.getString("role") : "Unknown";
             String className = doc.contains("class") ? doc.getString("class") : "";
             
+            // SCHOOL ISOLATION LOGIC (सिर्फ अपने स्कूल के लोग दिखेंगे)
+            String targetSchoolId = doc.contains("schoolId") ? doc.getString("schoolId") : "NA";
+            if (role.equals("school")) targetSchoolId = id; 
+
+            boolean isSameSchool = false;
+            if (currentUserRole.equals("admin") || role.equals("admin")) {
+                isSameSchool = true; // एडमिन सबको देख सकता है और सबको एडमिन दिखेगा
+            } else {
+                if (currentUserRole.equals("school")) {
+                    isSameSchool = targetSchoolId.equals(currentUserDocId); 
+                } else {
+                    isSameSchool = targetSchoolId.equals(currentUserSchoolId);
+                }
+            }
+
             boolean show = false;
-            if (currentUserRole.equals("admin")) show = true;
-            else if (currentUserRole.equals("school") && (role.equals("teacher") || role.equals("student") || role.equals("driver"))) show = true;
-            else if (currentUserRole.equals("teacher") && (role.equals("school") || role.equals("teacher") || role.equals("student"))) show = true;
-            else if (currentUserRole.equals("student") && (role.equals("school") || role.equals("teacher") || role.equals("student"))) show = true;
+            if (isSameSchool) {
+                if (currentUserRole.equals("admin")) show = true;
+                else if (currentUserRole.equals("school") && (role.equals("teacher") || role.equals("student") || role.equals("driver") || role.equals("admin"))) show = true;
+                else if (currentUserRole.equals("teacher") && (role.equals("school") || role.equals("teacher") || role.equals("student") || role.equals("admin"))) show = true;
+                else if (currentUserRole.equals("student") && (role.equals("school") || role.equals("teacher") || role.equals("student") || role.equals("admin"))) show = true;
+            }
 
             if (show) {
                 String searchString = (name + " " + role + " " + className).toLowerCase();
@@ -173,7 +189,6 @@ public class UsersListActivity extends AppCompatActivity {
                     addContactCard(id, name, subtext, "#FFFFFF", "#0F2BEB");
                     renderedCount++;
 
-                    // 🚀 CRASH FIX: Bina search kiye 1000 users ek sath screen par load karne se rokta hai
                     if (query.isEmpty() && renderedCount >= 30) {
                         addContactCard("", "🔍 Search to find more...", "Type name to see remaining users", "#F5F5F5", "#9E9E9E");
                         break; 
