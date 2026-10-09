@@ -34,7 +34,6 @@ public class SmsBackgroundService extends Service implements TextToSpeech.OnInit
                 .setSmallIcon(R.drawable.logo)
                 .build();
         
-        // 🔥 ANDROID 14/15/16 CRASH FIX: Specifying Foreground Service Type
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             startForeground(1, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC);
         } else {
@@ -64,6 +63,7 @@ public class SmsBackgroundService extends Service implements TextToSpeech.OnInit
         
         String myId = user.getEmail() != null ? user.getEmail().split("@")[0] : user.getUid();
         
+        // 🔥 MESSAGE NOTIFICATION & DELIVERED TICK FIX
         FirebaseFirestore.getInstance().collection("chats")
             .whereEqualTo("receiverId", myId)
             .addSnapshotListener((snaps, e) -> {
@@ -72,23 +72,26 @@ public class SmsBackgroundService extends Service implements TextToSpeech.OnInit
                     String docId = dc.getDocument().getId();
                     String status = dc.getDocument().getString("status");
                     
-                    if ("sent".equals(status)) {
-                        FirebaseFirestore.getInstance().collection("chats").document(docId).update("status", "delivered");
-                    }
-
                     if (dc.getType() == DocumentChange.Type.ADDED) {
-                        Long tsObj = dc.getDocument().getLong("timestamp");
-                        long msgTime = tsObj != null ? tsObj : 0;
-                        if (System.currentTimeMillis() - msgTime < 15000) {
-                            String msg = dc.getDocument().getString("message");
-                            String sender = dc.getDocument().getString("senderName");
-                            showPopUpNotification(sender, msg);
-                            speak("नया मैसेज आया है, " + sender + " से");
+                        // Agar naya message 'sent' hai, to background me usko 'delivered' karo
+                        if ("sent".equals(status)) {
+                            FirebaseFirestore.getInstance().collection("chats").document(docId).update("status", "delivered");
+                            
+                            // 🔥 Background Notification & Voice Alert
+                            Long tsObj = dc.getDocument().getLong("timestamp");
+                            long msgTime = tsObj != null ? tsObj : 0;
+                            if (System.currentTimeMillis() - msgTime < 15000) {
+                                String msg = dc.getDocument().getString("message");
+                                String sender = dc.getDocument().getString("senderName");
+                                showPopUpNotification(sender, msg);
+                                speak("नया मैसेज आया है, " + sender + " से");
+                            }
                         }
                     }
                 }
             });
 
+         // CALL WAKE-UP
          FirebaseFirestore.getInstance().collection("calls")
             .document(myId)
             .addSnapshotListener((snap, e) -> {
