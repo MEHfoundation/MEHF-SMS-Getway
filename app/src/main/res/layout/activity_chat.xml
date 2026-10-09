@@ -35,7 +35,8 @@
             android:layout_height="40dp"
             android:background="?attr/selectableItemBackground"
             android:src="@android:drawable/presence_video_online"
-            android:tint="#FFF"/>
+            android:tint="#FFF"
+            android:layout_marginStart="10dp"/>
     </LinearLayout>
 
     <!-- Chat Area -->
@@ -135,10 +136,12 @@
         android:background="#000"
         android:elevation="20dp"
         android:visibility="gone">
+        
         <org.webrtc.SurfaceViewRenderer
             android:id="@+id/remoteVideoView"
             android:layout_width="match_parent"
             android:layout_height="match_parent" />
+            
         <org.webrtc.SurfaceViewRenderer
             android:id="@+id/localVideoView"
             android:layout_width="120dp"
@@ -146,6 +149,22 @@
             android:layout_alignParentBottom="true"
             android:layout_alignParentRight="true"
             android:layout_margin="20dp" />
+
+        <!-- 🔥 CALL TIMER -->
+        <Chronometer
+            android:id="@+id/callTimer"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_alignParentTop="true"
+            android:layout_centerHorizontal="true"
+            android:layout_marginTop="30dp"
+            android:textColor="#FFF"
+            android:textSize="18sp"
+            android:textStyle="bold"
+            android:background="#88000000"
+            android:padding="10dp"
+            android:visibility="gone"/>
+
         <Button
             android:id="@+id/btnEndCall"
             android:layout_width="wrap_content"
