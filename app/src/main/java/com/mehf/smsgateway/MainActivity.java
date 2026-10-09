@@ -14,6 +14,7 @@ import android.graphics.Color;
 import android.graphics.drawable.GradientDrawable;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.PowerManager; // 🔥 NEW IMPORT
 import android.provider.Settings;
 import android.telephony.SmsManager;
 import android.telephony.SubscriptionInfo;
@@ -21,7 +22,6 @@ import android.telephony.SubscriptionManager;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
-import android.view.WindowManager;
 import android.widget.ArrayAdapter;
 import android.widget.Button;
 import android.widget.EditText;
@@ -123,6 +123,9 @@ public class MainActivity extends AppCompatActivity {
             scrollView.addView(mainLayout);
             setContentView(scrollView);
 
+            // 🔥 NEW: Check and request Battery Bypass & Overlay Permissions
+            checkAndRequestAdvancedPermissions();
+
             checkPermissionsAndStart();
 
         } catch (Exception e) {
@@ -130,6 +133,23 @@ public class MainActivity extends AppCompatActivity {
             errorText.setText("Startup Error: \n\n" + e.getMessage());
             errorText.setTextColor(Color.RED);
             setContentView(errorText);
+        }
+    }
+
+    // 🔥 NEW METHOD: Advanced Permissions for App Background Life & Call Popups
+    private void checkAndRequestAdvancedPermissions() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            PowerManager pm = (PowerManager) getSystemService(POWER_SERVICE);
+            if (pm != null && !pm.isIgnoringBatteryOptimizations(getPackageName())) {
+                Intent intent = new Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS);
+                intent.setData(Uri.parse("package:" + getPackageName()));
+                startActivity(intent);
+            }
+            
+            if (!Settings.canDrawOverlays(this)) {
+                Intent intent = new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:" + getPackageName()));
+                startActivity(intent);
+            }
         }
     }
 
