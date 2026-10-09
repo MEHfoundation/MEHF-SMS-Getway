@@ -90,7 +90,8 @@ public class ChatActivity extends AppCompatActivity {
     private boolean isIncomingVideo = false;
     private MediaPlayer ringtonePlayer; 
     
-    private boolean isCallActive = false; // 🔥 DOUBLE RINGTONE FIX
+    private boolean isCallActive = false; 
+    private boolean isActivityVisible = false; // 🔥 SCREEN VISIBILITY LOCK
 
     private String currentUserDocId = ""; 
     private String currentUserName = "";
@@ -98,22 +99,36 @@ public class ChatActivity extends AppCompatActivity {
     private String chatSchoolId = "NA"; 
 
     @Override
+    protected void onResume() {
+        super.onResume();
+        isActivityVisible = true; // User screen par aa gaya
+    }
+
+    @Override
+    protected void onPause() {
+        super.onPause();
+        isActivityVisible = false; // User screen se bahar (background/locked)
+    }
+
+    @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
-        // 🔥 LOCK SCREEN WAKE UP & BUTTONS VISIBILITY FIX
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
-            setShowWhenLocked(true);
-            setTurnScreenOn(true);
-            KeyguardManager km = (KeyguardManager) getSystemService(Context.KEYGUARD_SERVICE);
-            if (km != null) km.requestDismissKeyguard(this, null);
-        }
-        getWindow().addFlags(
-                WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED |
-                WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON |
-                WindowManager.LayoutParams.FLAG_DISMISS_KEYGUARD |
-                WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON
-        );
+        // 🔥 PERFECT SCREEN WAKE (No Battery Drain)
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
+                setShowWhenLocked(true);
+                setTurnScreenOn(true);
+                KeyguardManager km = (KeyguardManager) getSystemService(Context.KEYGUARD_SERVICE);
+                if (km != null) km.requestDismissKeyguard(this, null);
+            }
+            // KEEP_SCREEN_ON is REMOVED from here. It will only turn on when Call is accepted!
+            getWindow().addFlags(
+                    WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED |
+                    WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON |
+                    WindowManager.LayoutParams.FLAG_DISMISS_KEYGUARD
+            );
+        } catch (Exception e) { Log.e("WakeError", "Screen wake failed"); }
 
         setContentView(R.layout.activity_chat);
         audioManager = (AudioManager) getSystemService(Context.AUDIO_SERVICE);
@@ -184,33 +199,47 @@ public class ChatActivity extends AppCompatActivity {
         
         btnEndCall.setOnClickListener(v -> endCall());
         
-        // 🔥 CALL ACCEPT LOGIC FIX
+        // 🔥 CRASH-PROOF: CALL ACCEPT LOGIC
         btnAcceptCall.setOnClickListener(v -> { 
-            isCallActive = true; 
-            stopRingtone(); // तुरन्त रिंगटोन बंद करें
-            
-            incomingCallLayout.setVisibility(View.GONE);
-            videoCallContainer.setVisibility(View.VISIBLE);
-            
-            audioManager.setMode(AudioManager.MODE_IN_COMMUNICATION);
-            audioManager.setSpeakerphoneOn(isIncomingVideo);
-            audioManager.setMicrophoneMute(false);
+            try {
+                isCallActive = true; 
+                stopRingtone(); 
+                
+                incomingCallLayout.setVisibility(View.GONE);
+                videoCallContainer.setVisibility(View.VISIBLE);
+                
+                // Screen ko active call ke dauran hamesha ON rakhein
+                getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+                
+                // 🔥 DOUBLE RING LOOP FIX: Firebase Document ko update karke 'offer' se 'in-progress' kar dein
+                db.collection("calls").document(currentUserDocId).update("type", "in-progress");
 
-            startLocalStream(isIncomingVideo);
-            createPeerConnection();
-
-            peerConnection.setRemoteDescription(new SimpleSdpObserver(), new SessionDescription(SessionDescription.Type.OFFER, incomingSdp));
-            
-            peerConnection.createAnswer(new SimpleSdpObserver() {
-                @Override
-                public void onCreateSuccess(SessionDescription sessionDescription) {
-                    peerConnection.setLocalDescription(new SimpleSdpObserver(), sessionDescription);
-                    Map<String, Object> answerData = new HashMap<>();
-                    answerData.put("type", "answer");
-                    answerData.put("sdp", sessionDescription.description);
-                    db.collection("calls").document(incomingCallerId).set(answerData);
+                if(audioManager != null) {
+                    audioManager.setMode(AudioManager.MODE_IN_COMMUNICATION);
+                    audioManager.setSpeakerphoneOn(isIncomingVideo);
+                    audioManager.setMicrophoneMute(false);
                 }
-            }, new MediaConstraints());
+
+                startLocalStream(isIncomingVideo);
+                createPeerConnection();
+
+                peerConnection.setRemoteDescription(new SimpleSdpObserver(), new SessionDescription(SessionDescription.Type.OFFER, incomingSdp));
+                
+                peerConnection.createAnswer(new SimpleSdpObserver() {
+                    @Override
+                    public void onCreateSuccess(SessionDescription sessionDescription) {
+                        peerConnection.setLocalDescription(new SimpleSdpObserver(), sessionDescription);
+                        Map<String, Object> answerData = new HashMap<>();
+                        answerData.put("type", "answer");
+                        answerData.put("sdp", sessionDescription.description);
+                        db.collection("calls").document(incomingCallerId).set(answerData);
+                    }
+                }, new MediaConstraints());
+
+            } catch (Exception e) {
+                Toast.makeText(this, "Accept Call Error: " + e.getMessage(), Toast.LENGTH_LONG).show();
+                endCall();
+            }
         });
         
         btnDeclineCall.setOnClickListener(v -> { 
@@ -255,8 +284,11 @@ public class ChatActivity extends AppCompatActivity {
                       (receiverId.equals(targetUserId) && targetUserId.startsWith("group_"))) {
                       
                       if (dc.getType() == DocumentChange.Type.ADDED) {
-                          if (!senderId.equals(currentUserDocId) && !"read".equals(status)) {
-                              db.collection("chats").document(docId).update("status", "read");
+                          // 🔥 BACKGROUND READ FIX: Jab tak screen saamne nahi hai tab tak Read nahi hoga
+                          if (!senderId.equals(currentUserDocId)) {
+                              if (isActivityVisible && !"read".equals(status)) {
+                                  db.collection("chats").document(docId).update("status", "read");
+                              }
                           }
                           displayMessageOnScreen(docId, msg, currentUserDocId.equals(senderId), status, timestamp);
                       } else if (dc.getType() == DocumentChange.Type.MODIFIED) {
@@ -358,27 +390,32 @@ public class ChatActivity extends AppCompatActivity {
                     .setVideoDecoderFactory(new org.webrtc.DefaultVideoDecoderFactory(rootEglBase.getEglBaseContext()))
                     .setVideoEncoderFactory(new org.webrtc.DefaultVideoEncoderFactory(rootEglBase.getEglBaseContext(), true, true))
                     .createPeerConnectionFactory();
-        } catch (Exception e) {}
+        } catch (Exception e) {
+            Log.e("WebRTC", "Init failed: " + e.getMessage());
+        }
     }
 
     private void startLocalStream(boolean isVideo) {
-        if (peerConnectionFactory == null) return;
-        if (isVideo) {
-            videoCapturer = createVideoCapturer();
-            if (videoCapturer != null) {
-                surfaceTextureHelper = SurfaceTextureHelper.create("CaptureThread", rootEglBase.getEglBaseContext());
-                VideoSource videoSource = peerConnectionFactory.createVideoSource(videoCapturer.isScreencast());
-                videoCapturer.initialize(surfaceTextureHelper, this, videoSource.getCapturerObserver());
-                
-                // 🔥 BLACK SCREEN FIX: Safe Standard Resolution (640x480) Support for ALL Phones
-                videoCapturer.startCapture(640, 480, 30);
-                
-                localVideoTrack = peerConnectionFactory.createVideoTrack("100", videoSource);
-                localVideoTrack.addSink(localVideoView);
+        try {
+            if (peerConnectionFactory == null) return;
+            if (isVideo) {
+                videoCapturer = createVideoCapturer();
+                if (videoCapturer != null) {
+                    surfaceTextureHelper = SurfaceTextureHelper.create("CaptureThread", rootEglBase.getEglBaseContext());
+                    VideoSource videoSource = peerConnectionFactory.createVideoSource(videoCapturer.isScreencast());
+                    videoCapturer.initialize(surfaceTextureHelper, this, videoSource.getCapturerObserver());
+                    
+                    videoCapturer.startCapture(640, 480, 30);
+                    
+                    localVideoTrack = peerConnectionFactory.createVideoTrack("100", videoSource);
+                    localVideoTrack.addSink(localVideoView);
+                }
             }
+            AudioSource audioSource = peerConnectionFactory.createAudioSource(new MediaConstraints());
+            localAudioTrack = peerConnectionFactory.createAudioTrack("101", audioSource);
+        } catch (Exception e) {
+            Toast.makeText(this, "Camera/Mic Error: " + e.getMessage(), Toast.LENGTH_LONG).show();
         }
-        AudioSource audioSource = peerConnectionFactory.createAudioSource(new MediaConstraints());
-        localAudioTrack = peerConnectionFactory.createAudioTrack("101", audioSource);
     }
 
     private VideoCapturer createVideoCapturer() {
@@ -390,96 +427,108 @@ public class ChatActivity extends AppCompatActivity {
     }
 
     private void createPeerConnection() {
-        if (peerConnectionFactory == null) return;
-        List<PeerConnection.IceServer> iceServers = new ArrayList<>();
-        
-        // 🔥 MULTIPLE STUN SERVERS FIX FOR AUDIO/VIDEO TRANSFER
-        iceServers.add(PeerConnection.IceServer.builder("stun:stun.l.google.com:19302").createIceServer());
-        iceServers.add(PeerConnection.IceServer.builder("stun:stun1.l.google.com:19302").createIceServer());
-        iceServers.add(PeerConnection.IceServer.builder("stun:stun2.l.google.com:19302").createIceServer());
-
-        PeerConnection.IceServer turnServer = PeerConnection.IceServer.builder("turn:global.relay.metered.ca:80")
-                .setUsername("83226dbb4cd1e1df591d3101").setPassword("83226dbb4cd1e1df591d3101").createIceServer();
-        iceServers.add(turnServer);
-
-        PeerConnection.RTCConfiguration rtcConfig = new PeerConnection.RTCConfiguration(iceServers);
-        peerConnection = peerConnectionFactory.createPeerConnection(rtcConfig, new PeerConnection.Observer() {
-            @Override public void onSignalingChange(PeerConnection.SignalingState signalingState) {}
-            @Override public void onIceConnectionChange(PeerConnection.IceConnectionState iceConnectionState) {
-                runOnUiThread(() -> {
-                    if (iceConnectionState == PeerConnection.IceConnectionState.CONNECTED) {
-                        stopRingtone(); // Safety stop
-                        callTimer.setBase(SystemClock.elapsedRealtime());
-                        callTimer.start();
-                        callTimer.setVisibility(View.VISIBLE);
-                    } else if (iceConnectionState == PeerConnection.IceConnectionState.DISCONNECTED || 
-                               iceConnectionState == PeerConnection.IceConnectionState.FAILED) {
-                        Toast.makeText(ChatActivity.this, "Network Error - Call Disconnected", Toast.LENGTH_LONG).show();
-                        endCall();
-                    }
-                });
-            }
+        try {
+            if (peerConnectionFactory == null) return;
+            List<PeerConnection.IceServer> iceServers = new ArrayList<>();
             
-            @Override public void onIceConnectionReceivingChange(boolean b) {}
-            @Override public void onIceGatheringChange(PeerConnection.IceGatheringState iceGatheringState) {}
-            @Override
-            public void onIceCandidate(IceCandidate iceCandidate) {
-                Map<String, Object> candidateData = new HashMap<>();
-                candidateData.put("type", "candidate");
-                candidateData.put("sdpMid", iceCandidate.sdpMid);
-                candidateData.put("sdpMLineIndex", iceCandidate.sdpMLineIndex);
-                candidateData.put("sdp", iceCandidate.sdp);
-                String target = incomingCallerId.isEmpty() ? targetUserId : incomingCallerId;
-                db.collection("calls").document(target).collection("candidates").add(candidateData);
-            }
-            @Override public void onIceCandidatesRemoved(IceCandidate[] iceCandidates) {}
-            @Override
-            public void onAddStream(MediaStream mediaStream) {
-                if (mediaStream.videoTracks.size() > 0) runOnUiThread(() -> mediaStream.videoTracks.get(0).addSink(remoteVideoView));
-            }
-            @Override public void onRemoveStream(MediaStream mediaStream) {}
-            @Override public void onDataChannel(DataChannel dataChannel) {}
-            @Override public void onRenegotiationNeeded() {}
-        });
+            iceServers.add(PeerConnection.IceServer.builder("stun:stun.l.google.com:19302").createIceServer());
+            iceServers.add(PeerConnection.IceServer.builder("stun:stun1.l.google.com:19302").createIceServer());
 
-        if (localVideoTrack != null) peerConnection.addTrack(localVideoTrack);
-        if (localAudioTrack != null) peerConnection.addTrack(localAudioTrack);
+            PeerConnection.IceServer turnServer = PeerConnection.IceServer.builder("turn:global.relay.metered.ca:80")
+                    .setUsername("83226dbb4cd1e1df591d3101").setPassword("83226dbb4cd1e1df591d3101").createIceServer();
+            iceServers.add(turnServer);
+
+            PeerConnection.RTCConfiguration rtcConfig = new PeerConnection.RTCConfiguration(iceServers);
+            peerConnection = peerConnectionFactory.createPeerConnection(rtcConfig, new PeerConnection.Observer() {
+                @Override public void onSignalingChange(PeerConnection.SignalingState signalingState) {}
+                @Override public void onIceConnectionChange(PeerConnection.IceConnectionState iceConnectionState) {
+                    runOnUiThread(() -> {
+                        if (iceConnectionState == PeerConnection.IceConnectionState.CONNECTED) {
+                            stopRingtone(); 
+                            if(callTimer != null) {
+                                callTimer.setBase(SystemClock.elapsedRealtime());
+                                callTimer.start();
+                                callTimer.setVisibility(View.VISIBLE);
+                            }
+                        } else if (iceConnectionState == PeerConnection.IceConnectionState.DISCONNECTED || 
+                                   iceConnectionState == PeerConnection.IceConnectionState.FAILED) {
+                            Toast.makeText(ChatActivity.this, "Call Ended / Network Failed", Toast.LENGTH_SHORT).show();
+                            endCall();
+                        }
+                    });
+                }
+                
+                @Override public void onIceConnectionReceivingChange(boolean b) {}
+                @Override public void onIceGatheringChange(PeerConnection.IceGatheringState iceGatheringState) {}
+                @Override
+                public void onIceCandidate(IceCandidate iceCandidate) {
+                    Map<String, Object> candidateData = new HashMap<>();
+                    candidateData.put("type", "candidate");
+                    candidateData.put("sdpMid", iceCandidate.sdpMid);
+                    candidateData.put("sdpMLineIndex", iceCandidate.sdpMLineIndex);
+                    candidateData.put("sdp", iceCandidate.sdp);
+                    String target = incomingCallerId.isEmpty() ? targetUserId : incomingCallerId;
+                    db.collection("calls").document(target).collection("candidates").add(candidateData);
+                }
+                @Override public void onIceCandidatesRemoved(IceCandidate[] iceCandidates) {}
+                @Override
+                public void onAddStream(MediaStream mediaStream) {
+                    if (mediaStream.videoTracks.size() > 0) runOnUiThread(() -> mediaStream.videoTracks.get(0).addSink(remoteVideoView));
+                }
+                @Override public void onRemoveStream(MediaStream mediaStream) {}
+                @Override public void onDataChannel(DataChannel dataChannel) {}
+                @Override public void onRenegotiationNeeded() {}
+            });
+
+            if (localVideoTrack != null) peerConnection.addTrack(localVideoTrack);
+            if (localAudioTrack != null) peerConnection.addTrack(localAudioTrack);
+        } catch (Exception e) {
+            Toast.makeText(this, "Connection Error: " + e.getMessage(), Toast.LENGTH_LONG).show();
+        }
     }
 
     private void startCall(boolean isVideo) {
-        if (peerConnectionFactory == null) {
-            Toast.makeText(this, "WebRTC Not Ready! Grant Permissions.", Toast.LENGTH_SHORT).show();
-            return;
-        }
-        
-        isCallActive = true;
-        videoCallContainer.setVisibility(View.VISIBLE);
-        Toast.makeText(this, "Calling...", Toast.LENGTH_SHORT).show();
-        
-        audioManager.setMode(AudioManager.MODE_IN_COMMUNICATION);
-        audioManager.setSpeakerphoneOn(isVideo);
-
-        startLocalStream(isVideo);
-        createPeerConnection();
-
-        MediaConstraints constraints = new MediaConstraints();
-        constraints.mandatory.add(new MediaConstraints.KeyValuePair("OfferToReceiveAudio", "true"));
-        constraints.mandatory.add(new MediaConstraints.KeyValuePair("OfferToReceiveVideo", isVideo ? "true" : "false"));
-
-        peerConnection.createOffer(new SimpleSdpObserver() {
-            @Override
-            public void onCreateSuccess(SessionDescription sessionDescription) {
-                peerConnection.setLocalDescription(new SimpleSdpObserver(), sessionDescription);
-                Map<String, Object> callData = new HashMap<>();
-                callData.put("callerId", currentUserDocId);
-                callData.put("targetId", targetUserId);
-                callData.put("type", "offer");
-                callData.put("isVideo", isVideo);
-                callData.put("timestamp", System.currentTimeMillis());
-                callData.put("sdp", sessionDescription.description);
-                db.collection("calls").document(targetUserId).set(callData);
+        try {
+            if (peerConnectionFactory == null) {
+                Toast.makeText(this, "WebRTC Not Ready! Grant Permissions.", Toast.LENGTH_SHORT).show();
+                return;
             }
-        }, constraints);
+            
+            isCallActive = true;
+            videoCallContainer.setVisibility(View.VISIBLE);
+            getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON); // 🔥 CALL START SCREEN LOCK
+            
+            Toast.makeText(this, "Calling...", Toast.LENGTH_SHORT).show();
+            
+            if(audioManager != null) {
+                audioManager.setMode(AudioManager.MODE_IN_COMMUNICATION);
+                audioManager.setSpeakerphoneOn(isVideo);
+            }
+
+            startLocalStream(isVideo);
+            createPeerConnection();
+
+            MediaConstraints constraints = new MediaConstraints();
+            constraints.mandatory.add(new MediaConstraints.KeyValuePair("OfferToReceiveAudio", "true"));
+            constraints.mandatory.add(new MediaConstraints.KeyValuePair("OfferToReceiveVideo", isVideo ? "true" : "false"));
+
+            peerConnection.createOffer(new SimpleSdpObserver() {
+                @Override
+                public void onCreateSuccess(SessionDescription sessionDescription) {
+                    peerConnection.setLocalDescription(new SimpleSdpObserver(), sessionDescription);
+                    Map<String, Object> callData = new HashMap<>();
+                    callData.put("callerId", currentUserDocId);
+                    callData.put("targetId", targetUserId);
+                    callData.put("type", "offer");
+                    callData.put("isVideo", isVideo);
+                    callData.put("timestamp", System.currentTimeMillis());
+                    callData.put("sdp", sessionDescription.description);
+                    db.collection("calls").document(targetUserId).set(callData);
+                }
+            }, constraints);
+        } catch (Exception e) {
+            Toast.makeText(this, "Call Failed: " + e.getMessage(), Toast.LENGTH_LONG).show();
+        }
     }
 
     private void listenForIncomingSignals() {
@@ -531,7 +580,7 @@ public class ChatActivity extends AppCompatActivity {
 
     private void startRingtone() {
         try {
-            if (isCallActive) return; // अगर कॉल उठ गई है तो रिंग मत करो
+            if (isCallActive) return; 
             if (ringtonePlayer != null && ringtonePlayer.isPlaying()) return; 
             
             Uri ringtoneUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE);
@@ -552,11 +601,20 @@ public class ChatActivity extends AppCompatActivity {
     private void endCall() {
         isCallActive = false;
         stopRingtone(); 
-        audioManager.setMode(AudioManager.MODE_NORMAL); 
-        audioManager.setSpeakerphoneOn(false);
+        
+        // 🔥 REMOVE SCREEN ON LOCK
+        getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+        
+        if (audioManager != null) {
+            audioManager.setMode(AudioManager.MODE_NORMAL); 
+            audioManager.setSpeakerphoneOn(false);
+        }
 
-        callTimer.stop(); 
-        callTimer.setVisibility(View.GONE);
+        if (callTimer != null) {
+            callTimer.stop(); 
+            callTimer.setVisibility(View.GONE);
+        }
+        
         videoCallContainer.setVisibility(View.GONE);
         incomingCallLayout.setVisibility(View.GONE);
         
