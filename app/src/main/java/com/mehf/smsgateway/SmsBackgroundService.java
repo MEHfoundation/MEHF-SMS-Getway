@@ -8,6 +8,7 @@ import android.app.Service;
 import android.content.Intent;
 import android.os.Build;
 import android.os.IBinder;
+import android.speech.tts.TextToSpeech;
 
 import androidx.core.app.NotificationCompat;
 
@@ -16,22 +17,41 @@ import com.google.firebase.auth.FirebaseUser;
 import com.google.firebase.firestore.DocumentChange;
 import com.google.firebase.firestore.FirebaseFirestore;
 
-public class SmsBackgroundService extends Service {
+import java.util.Locale;
+
+public class SmsBackgroundService extends Service implements TextToSpeech.OnInitListener {
+
+    private TextToSpeech tts;
+    private boolean isTtsReady = false;
 
     @Override
     public void onCreate() {
         super.onCreate();
-        createNotificationChannel();
+        tts = new TextToSpeech(this, this);
+        createNotificationChannels();
         
-        // Foreground Service Notification (ताकि ऐप बैकग्राउंड में बंद न हो)
         Notification notification = new NotificationCompat.Builder(this, "MEHF_SERVICE")
                 .setContentTitle("MEHF System Active")
-                .setContentText("Listening for messages, calls & SMS...")
-                .setSmallIcon(R.drawable.logo) // 👈 YAHAN BADLAV KIYA HAI
+                .setContentText("Listening for messages & calls...")
+                .setSmallIcon(R.drawable.logo)
                 .build();
         startForeground(1, notification);
         
         listenForNewChatsAndCalls();
+    }
+
+    @Override
+    public void onInit(int status) {
+        if (status == TextToSpeech.SUCCESS) {
+            tts.setLanguage(new Locale("hi", "IN")); // Set Hindi Language
+            isTtsReady = true;
+        }
+    }
+
+    private void speak(String text) {
+        if (isTtsReady && tts != null) {
+            tts.speak(text, TextToSpeech.QUEUE_FLUSH, null, null);
+        }
     }
 
     private void listenForNewChatsAndCalls() {
@@ -40,29 +60,59 @@ public class SmsBackgroundService extends Service {
         
         String myId = user.getEmail() != null ? user.getEmail().split("@")[0] : user.getUid();
         
-        // 1. Listen for Chats
+        // 1. Message Listener
         FirebaseFirestore.getInstance().collection("chats")
             .whereEqualTo("receiverId", myId)
             .addSnapshotListener((snaps, e) -> {
                 if (e != null || snaps == null) return;
                 for (DocumentChange dc : snaps.getDocumentChanges()) {
                     if (dc.getType() == DocumentChange.Type.ADDED) {
-                        String msg = dc.getDocument().getString("message");
-                        String sender = dc.getDocument().getString("senderName");
+                        Long tsObj = dc.getDocument().getLong("timestamp");
+                        long msgTime = tsObj != null ? tsObj : 0;
                         
-                        // मेसेज का नोटिफिकेशन दिखाएं
-                        showPopUpNotification(sender, msg);
+                        // Sirf naye messages (Pichle 15 second wale) par aawaz aayegi
+                        if (System.currentTimeMillis() - msgTime < 15000) {
+                            String msg = dc.getDocument().getString("message");
+                            String sender = dc.getDocument().getString("senderName");
+                            
+                            showPopUpNotification(sender, msg);
+                            speak("नया मैसेज आया है, " + sender + " से");
+                        }
                     }
                 }
             });
 
-         // 2. Listen for Calls
+         // 2. Call Listener
          FirebaseFirestore.getInstance().collection("calls")
             .document(myId)
             .addSnapshotListener((snap, e) -> {
                 if (e != null || snap == null || !snap.exists()) return;
+                
                 if ("offer".equals(snap.getString("type"))) {
-                     showPopUpNotification("📞 Incoming Call", snap.getString("callerId") + " is calling you!");
+                    String caller = snap.getString("callerId");
+                    
+                    // 🔥 WAKE SCREEN INTENT (App band hone par bhi Call Screen khulegi)
+                    Intent intent = new Intent(this, ChatActivity.class);
+                    intent.putExtra("targetUserId", caller);
+                    intent.putExtra("targetUserName", caller);
+                    intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
+                    
+                    PendingIntent pi = PendingIntent.getActivity(this, 1, intent, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
+                    
+                    // Silent Notification specifically for waking screen
+                    NotificationCompat.Builder builder = new NotificationCompat.Builder(this, "MEHF_CALL_CHANNEL")
+                            .setContentTitle("📞 Incoming Call")
+                            .setContentText(caller + " is calling...")
+                            .setSmallIcon(R.drawable.logo)
+                            .setPriority(NotificationCompat.PRIORITY_MAX)
+                            .setCategory(NotificationCompat.CATEGORY_CALL)
+                            .setFullScreenIntent(pi, true) 
+                            .setAutoCancel(true);
+                            
+                    NotificationManager nm = (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
+                    nm.notify(100, builder.build());
+                    
+                    speak("इनकमिंग कॉल आ रही है, " + caller + " से");
                 }
             });
     }
@@ -75,7 +125,7 @@ public class SmsBackgroundService extends Service {
         Notification n = new NotificationCompat.Builder(this, "MEHF_SERVICE")
                 .setContentTitle(title)
                 .setContentText(body)
-                .setSmallIcon(R.drawable.logo) // 👈 YAHAN BHI BADLAV KIYA HAI
+                .setSmallIcon(R.drawable.logo)
                 .setContentIntent(pi)
                 .setAutoCancel(true)
                 .setPriority(NotificationCompat.PRIORITY_HIGH)
@@ -85,19 +135,23 @@ public class SmsBackgroundService extends Service {
         nm.notify((int) System.currentTimeMillis(), n);
     }
 
-    private void createNotificationChannel() {
+    private void createNotificationChannels() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            NotificationChannel channel = new NotificationChannel("MEHF_SERVICE", "MEHF Background Alerts", NotificationManager.IMPORTANCE_HIGH);
             NotificationManager nm = getSystemService(NotificationManager.class);
-            if (nm != null) nm.createNotificationChannel(channel);
+            if (nm != null) {
+                // Messages ke liye awaaz wali channel
+                NotificationChannel msgChannel = new NotificationChannel("MEHF_SERVICE", "MEHF Messages", NotificationManager.IMPORTANCE_HIGH);
+                nm.createNotificationChannel(msgChannel);
+                
+                // 🔥 Calls ke liye Bina Awaaz ki channel (Taki Double Ringtone na baje)
+                NotificationChannel callChannel = new NotificationChannel("MEHF_CALL_CHANNEL", "Incoming Calls", NotificationManager.IMPORTANCE_HIGH);
+                callChannel.setSound(null, null); 
+                callChannel.enableVibration(true);
+                nm.createNotificationChannel(callChannel);
+            }
         }
     }
 
-    @Override 
-    public IBinder onBind(Intent intent) { return null; }
-    
-    @Override 
-    public int onStartCommand(Intent intent, int flags, int startId) { 
-        return START_STICKY; 
-    }
+    @Override public IBinder onBind(Intent intent) { return null; }
+    @Override public void onDestroy() { if (tts != null) tts.shutdown(); super.onDestroy(); }
 }
