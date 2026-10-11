@@ -97,22 +97,26 @@ public class IncomingCallActivity extends AppCompatActivity {
     }
 
     private void acceptCall() {
-    // 🔥 Call accept hote hi Firestore se document delete karein taaki ring stop ho
-    FirebaseFirestore.getInstance().collection("calls").document(currentUserDocId).delete();
-    stopRingtone();
-    try {
-        org.jitsi.meet.sdk.JitsiMeetConferenceOptions options = new org.jitsi.meet.sdk.JitsiMeetConferenceOptions.Builder()
-                .setServerURL(new java.net.URL("https://meet.ffmuc.net"))
-                .setRoom(roomName)
-                .setAudioMuted(false)
-                .setVideoMuted(!isVideo)
-                .setFeatureFlag("prejoinpage.enabled", false)
-                .setFeatureFlag("invite.enabled", true)
-                .build();
-        org.jitsi.meet.sdk.JitsiMeetActivity.launch(this, options);
-    } catch (Exception e) {}
-    finish();
-}
+        FirebaseFirestore.getInstance().collection("calls").document(currentUserDocId).delete();
+        stopRingtone();
+        try {
+            org.jitsi.meet.sdk.JitsiMeetConferenceOptions options = new org.jitsi.meet.sdk.JitsiMeetConferenceOptions.Builder()
+                    .setServerURL(new java.net.URL("https://meet.ffmuc.net"))
+                    .setRoom(roomName)
+                    .setAudioMuted(false)
+                    .setVideoMuted(!isVideo)
+                    .setSubject("MEHF Secure Call")
+                    .setFeatureFlag("prejoinpage.enabled", false)
+                    .setFeatureFlag("invite.enabled", true)
+                    .setFeatureFlag("welcomepage.enabled", false)
+                    .setFeatureFlag("tile-view.enabled", true)
+                    .build();
+            org.jitsi.meet.sdk.JitsiMeetActivity.launch(this, options);
+        } catch (Exception e) {
+            Toast.makeText(this, "Accept Error: " + e.getMessage(), Toast.LENGTH_SHORT).show();
+        }
+        finish();
+    }
 
     private void declineCall() {
         FirebaseFirestore.getInstance().collection("calls").document(currentUserDocId).delete();
