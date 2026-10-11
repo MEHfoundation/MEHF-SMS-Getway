@@ -42,7 +42,5 @@ dependencies {
 
     // OneSignal
     implementation 'com.onesignal:OneSignal:[5.0.0, 5.99.99]'
-
-    // 🔥 NAYA: Jitsi Meet Native SDK (Bina Black Screen aur Expiry ke)
-    implementation ('org.jitsi.react:jitsi-meet-sdk:8.1.2') { transitive = true }
+    implementation ('org.jitsi.react:jitsi-meet-sdk:8.6.0') { transitive = true }
 }
