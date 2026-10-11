@@ -136,7 +136,7 @@ public class UsersListActivity extends AppCompatActivity {
                 try {
                     String roomName = "MEHF_Staff_Meet_" + (currentUserSchoolId.equals("NA") ? "AdminRoom" : currentUserSchoolId);
                     org.jitsi.meet.sdk.JitsiMeetConferenceOptions options = new org.jitsi.meet.sdk.JitsiMeetConferenceOptions.Builder()
-                            .setServerURL(new java.net.URL("https://meet.jit.si"))
+                            .setServerURL(new java.net.URL("https://meet.ffmuc.net"))
                             .setRoom(roomName)
                             .setAudioMuted(false)
                             .setVideoMuted(false)
