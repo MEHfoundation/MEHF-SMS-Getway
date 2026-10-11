@@ -1,5 +1,4 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- 1. package वाली लाइन हटा दी गई है और tools जोड़ दिया गया है -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
@@ -28,7 +27,6 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
 
-    <!-- 2. यहाँ tools:replace="android:label" जोड़ दिया गया है ताकि कोई क्लैश न हो -->
     <application
         android:allowBackup="true"
         android:icon="@drawable/logo"
@@ -36,7 +34,7 @@
         android:theme="@style/Theme.AppCompat.Light.NoActionBar"
         tools:replace="android:label">
         
-        <!-- बैकग्राउंड में ऐप बंद होने पर कॉल की घंटी बजाने वाली सर्विस -->
+        <!-- बैकग्राउंड में ऐप बंद होने पर नोटिफिकेशन की सर्विस -->
         <service
             android:name=".MyFirebaseMessagingService"
             android:exported="true">
@@ -60,12 +58,25 @@
             android:name=".UsersListActivity" 
             android:exported="false" />
 
-        <!-- 🔥 CRITICAL FIX: ChatActivity -->
+        <!-- Chat Activity (Jitsi Calling Screen) -->
         <activity 
             android:name=".ChatActivity" 
             android:configChanges="orientation|screenSize|screenLayout|keyboardHidden"
             android:showWhenLocked="true"
             android:turnScreenOn="true"
+            android:exported="false" />
+
+        <!-- 🔥 NEW: Nayi Screen (Screen Lock par dikhane ke liye Incoming Call UI) -->
+        <activity 
+            android:name=".IncomingCallActivity" 
+            android:showWhenLocked="true"
+            android:turnScreenOn="true"
+            android:excludeFromRecents="true"
+            android:exported="false" />
+
+        <!-- 🔥 NEW: Background me Call Sunne wali Service -->
+        <service 
+            android:name=".CallBackgroundService" 
             android:exported="false" />
 
         <!-- Background SMS & Call Listener Service -->
