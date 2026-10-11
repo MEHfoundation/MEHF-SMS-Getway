@@ -90,7 +90,7 @@ public class ChatActivity extends AppCompatActivity {
     private boolean isIncomingVideo = false;
     private MediaPlayer ringtonePlayer; 
     
-    private boolean isCallActive = false; 
+    private boolean isCallActive = false; // 🔥 DOUBLE RINGTONE LOOP FIX
     private boolean isActivityVisible = false; // 🔥 SCREEN VISIBILITY LOCK
 
     private String currentUserDocId = ""; 
@@ -114,7 +114,7 @@ public class ChatActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
-        // 🔥 PERFECT SCREEN WAKE (No Battery Drain)
+        // 🔥 PERFECT SCREEN WAKE (No Battery Drain, Only wakes on call)
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
                 setShowWhenLocked(true);
@@ -122,7 +122,6 @@ public class ChatActivity extends AppCompatActivity {
                 KeyguardManager km = (KeyguardManager) getSystemService(Context.KEYGUARD_SERVICE);
                 if (km != null) km.requestDismissKeyguard(this, null);
             }
-            // KEEP_SCREEN_ON is REMOVED from here. It will only turn on when Call is accepted!
             getWindow().addFlags(
                     WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED |
                     WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON |
@@ -211,7 +210,7 @@ public class ChatActivity extends AppCompatActivity {
                 // Screen ko active call ke dauran hamesha ON rakhein
                 getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
                 
-                // 🔥 DOUBLE RING LOOP FIX: Firebase Document ko update karke 'offer' se 'in-progress' kar dein
+                // 🔥 ANTI-LOOP FIREWALL: Status update karke loop block karein
                 db.collection("calls").document(currentUserDocId).update("type", "in-progress");
 
                 if(audioManager != null) {
@@ -284,7 +283,7 @@ public class ChatActivity extends AppCompatActivity {
                       (receiverId.equals(targetUserId) && targetUserId.startsWith("group_"))) {
                       
                       if (dc.getType() == DocumentChange.Type.ADDED) {
-                          // 🔥 BACKGROUND READ FIX: Jab tak screen saamne nahi hai tab tak Read nahi hoga
+                          // 🔥 BACKGROUND READ FIX: Jab tak chat page open na ho, 'read' mark mat karo
                           if (!senderId.equals(currentUserDocId)) {
                               if (isActivityVisible && !"read".equals(status)) {
                                   db.collection("chats").document(docId).update("status", "read");
@@ -374,8 +373,7 @@ public class ChatActivity extends AppCompatActivity {
             PeerConnectionFactory.InitializationOptions initializationOptions =
                     PeerConnectionFactory.InitializationOptions.builder(this)
                             .setEnableInternalTracer(true)
-                            .setFieldTrials("WebRTC-H264HighProfile/Enabled/")
-                            .createInitializationOptions();
+                            .createInitializationOptions(); // Removed H264 high profile for maximum compatibility
             PeerConnectionFactory.initialize(initializationOptions);
 
             rootEglBase = EglBase.create();
@@ -405,7 +403,8 @@ public class ChatActivity extends AppCompatActivity {
                     VideoSource videoSource = peerConnectionFactory.createVideoSource(videoCapturer.isScreencast());
                     videoCapturer.initialize(surfaceTextureHelper, this, videoSource.getCapturerObserver());
                     
-                    videoCapturer.startCapture(640, 480, 30);
+                    // 🔥 BLACK SCREEN FIX: 320x240 @ 15fps (Saste/Keypad Phones ke liye)
+                    videoCapturer.startCapture(320, 240, 15);
                     
                     localVideoTrack = peerConnectionFactory.createVideoTrack("100", videoSource);
                     localVideoTrack.addSink(localVideoView);
@@ -431,8 +430,11 @@ public class ChatActivity extends AppCompatActivity {
             if (peerConnectionFactory == null) return;
             List<PeerConnection.IceServer> iceServers = new ArrayList<>();
             
+            // 🔥 NETWORK FIX: 4 Google STUN Servers + 1 TURN Server for unbreakable connection
             iceServers.add(PeerConnection.IceServer.builder("stun:stun.l.google.com:19302").createIceServer());
             iceServers.add(PeerConnection.IceServer.builder("stun:stun1.l.google.com:19302").createIceServer());
+            iceServers.add(PeerConnection.IceServer.builder("stun:stun2.l.google.com:19302").createIceServer());
+            iceServers.add(PeerConnection.IceServer.builder("stun:stun3.l.google.com:19302").createIceServer());
 
             PeerConnection.IceServer turnServer = PeerConnection.IceServer.builder("turn:global.relay.metered.ca:80")
                     .setUsername("83226dbb4cd1e1df591d3101").setPassword("83226dbb4cd1e1df591d3101").createIceServer();
@@ -496,7 +498,7 @@ public class ChatActivity extends AppCompatActivity {
             
             isCallActive = true;
             videoCallContainer.setVisibility(View.VISIBLE);
-            getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON); // 🔥 CALL START SCREEN LOCK
+            getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
             
             Toast.makeText(this, "Calling...", Toast.LENGTH_SHORT).show();
             
@@ -534,10 +536,13 @@ public class ChatActivity extends AppCompatActivity {
     private void listenForIncomingSignals() {
         db.collection("calls").document(currentUserDocId)
           .addSnapshotListener((snapshot, e) -> {
+              // 🔥 YAHAN FIREWALL LAGA DIYA: Agar Call Active hai, toh aage ka process rok do
+              if (isCallActive) return;
+
               if (snapshot == null || !snapshot.exists()) {
                   runOnUiThread(() -> {
                       incomingCallLayout.setVisibility(View.GONE);
-                      if (!isCallActive) stopRingtone();
+                      stopRingtone();
                   });
                   return;
               }
