@@ -342,7 +342,7 @@ public class ChatActivity extends AppCompatActivity {
     private void launchJitsiMeet(String roomName, boolean isVideo) {
         try {
             JitsiMeetConferenceOptions options = new JitsiMeetConferenceOptions.Builder()
-                    .setServerURL(new URL("https://meet.jit.si"))
+                    .setServerURL(new URL("https://meet.ffmuc.net"))
                     .setRoom(roomName)
                     .setAudioMuted(false) // Voice humesha chalu
                     .setVideoMuted(!isVideo) 
