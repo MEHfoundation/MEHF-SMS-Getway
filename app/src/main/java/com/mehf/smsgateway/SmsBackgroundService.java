@@ -5,8 +5,10 @@ import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.app.Service;
+import android.content.Context;
 import android.content.Intent;
 import android.content.pm.ServiceInfo;
+import android.media.AudioManager;
 import android.os.Build;
 import android.os.IBinder;
 import android.speech.tts.TextToSpeech;
@@ -46,12 +48,19 @@ public class SmsBackgroundService extends Service implements TextToSpeech.OnInit
     @Override
     public void onInit(int status) {
         if (status == TextToSpeech.SUCCESS) {
-            tts.setLanguage(new Locale("hi", "IN")); // Hindi set kiya
+            tts.setLanguage(new Locale("hi", "IN"));
             isTtsReady = true;
         }
     }
 
     private void speak(String text) {
+        // 🔥 AUDIO FIX: Ensure phone is NOT stuck in "Call Mode" silently
+        AudioManager am = (AudioManager) getSystemService(Context.AUDIO_SERVICE);
+        if (am != null) {
+            am.setMode(AudioManager.MODE_NORMAL);
+            am.setSpeakerphoneOn(false);
+        }
+        
         if (isTtsReady && tts != null) {
             tts.speak(text, TextToSpeech.QUEUE_FLUSH, null, null);
         }
@@ -63,7 +72,6 @@ public class SmsBackgroundService extends Service implements TextToSpeech.OnInit
         
         String myId = user.getEmail() != null ? user.getEmail().split("@")[0] : user.getUid();
         
-        // 🔥 SMART TTS: Message Read Logic
         FirebaseFirestore.getInstance().collection("chats")
             .whereEqualTo("receiverId", myId)
             .addSnapshotListener((snaps, e) -> {
@@ -78,12 +86,11 @@ public class SmsBackgroundService extends Service implements TextToSpeech.OnInit
                             
                             Long tsObj = dc.getDocument().getLong("timestamp");
                             long msgTime = tsObj != null ? tsObj : 0;
+                            // 🔥 Ensure we only alert for recent messages
                             if (System.currentTimeMillis() - msgTime < 15000) {
                                 String msg = dc.getDocument().getString("message");
                                 String sender = dc.getDocument().getString("senderName");
                                 showPopUpNotification(sender, msg);
-                                
-                                // 🔥 Yahan Badlav Kiya Hai: Ab seedha Message Padhega
                                 speak(sender + " का मैसेज है: " + msg);
                             }
                         }
@@ -91,7 +98,6 @@ public class SmsBackgroundService extends Service implements TextToSpeech.OnInit
                 }
             });
 
-         // CALL WAKE-UP
          FirebaseFirestore.getInstance().collection("calls")
             .document(myId)
             .addSnapshotListener((snap, e) -> {
@@ -134,7 +140,7 @@ public class SmsBackgroundService extends Service implements TextToSpeech.OnInit
                 .setContentIntent(pi)
                 .setAutoCancel(true)
                 .setPriority(NotificationCompat.PRIORITY_HIGH)
-                .setDefaults(Notification.DEFAULT_ALL)
+                .setDefaults(Notification.DEFAULT_ALL) // 🔥 FIX: This will force the system notification sound/ping
                 .build();
         nm.notify((int) System.currentTimeMillis(), n);
     }
