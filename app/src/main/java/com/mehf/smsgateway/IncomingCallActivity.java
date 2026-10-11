@@ -97,21 +97,22 @@ public class IncomingCallActivity extends AppCompatActivity {
     }
 
     private void acceptCall() {
-        FirebaseFirestore.getInstance().collection("calls").document(currentUserDocId).update("type", "in-progress");
-        stopRingtone();
-        try {
-            JitsiMeetConferenceOptions options = new JitsiMeetConferenceOptions.Builder()
-                    .setServerURL(new URL("https://meet.ffmuc.net"))
-                    .setRoom(roomName)
-                    .setAudioMuted(false)
-                    .setVideoMuted(!isVideo)
-                    .setFeatureFlag("prejoinpage.enabled", false)
-                    .setFeatureFlag("invite.enabled", true)
-                    .build();
-            JitsiMeetActivity.launch(this, options);
-        } catch (Exception e) {}
-        finish();
-    }
+    // 🔥 Call accept hote hi Firestore se document delete karein taaki ring stop ho
+    FirebaseFirestore.getInstance().collection("calls").document(currentUserDocId).delete();
+    stopRingtone();
+    try {
+        org.jitsi.meet.sdk.JitsiMeetConferenceOptions options = new org.jitsi.meet.sdk.JitsiMeetConferenceOptions.Builder()
+                .setServerURL(new java.net.URL("https://meet.ffmuc.net"))
+                .setRoom(roomName)
+                .setAudioMuted(false)
+                .setVideoMuted(!isVideo)
+                .setFeatureFlag("prejoinpage.enabled", false)
+                .setFeatureFlag("invite.enabled", true)
+                .build();
+        org.jitsi.meet.sdk.JitsiMeetActivity.launch(this, options);
+    } catch (Exception e) {}
+    finish();
+}
 
     private void declineCall() {
         FirebaseFirestore.getInstance().collection("calls").document(currentUserDocId).delete();
