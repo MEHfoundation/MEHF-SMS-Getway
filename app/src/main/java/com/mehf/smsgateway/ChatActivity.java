@@ -40,6 +40,8 @@ import org.webrtc.Camera1Enumerator;
 import org.webrtc.Camera2Enumerator;
 import org.webrtc.CameraEnumerator;
 import org.webrtc.DataChannel;
+import org.webrtc.DefaultVideoDecoderFactory;
+import org.webrtc.DefaultVideoEncoderFactory;
 import org.webrtc.EglBase;
 import org.webrtc.IceCandidate;
 import org.webrtc.MediaConstraints;
@@ -90,8 +92,8 @@ public class ChatActivity extends AppCompatActivity {
     private boolean isIncomingVideo = false;
     private MediaPlayer ringtonePlayer; 
     
-    private boolean isCallActive = false; // 🔥 DOUBLE RINGTONE LOOP FIX
-    private boolean isActivityVisible = false; // 🔥 SCREEN VISIBILITY LOCK
+    private boolean isCallActive = false; 
+    private boolean isActivityVisible = false; 
 
     private String currentUserDocId = ""; 
     private String currentUserName = "";
@@ -101,13 +103,13 @@ public class ChatActivity extends AppCompatActivity {
     @Override
     protected void onResume() {
         super.onResume();
-        isActivityVisible = true; // User screen par aa gaya
+        isActivityVisible = true;
     }
 
     @Override
     protected void onPause() {
         super.onPause();
-        isActivityVisible = false; // User screen se bahar (background/locked)
+        isActivityVisible = false;
     }
 
     @Override
@@ -127,7 +129,9 @@ public class ChatActivity extends AppCompatActivity {
                     WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON |
                     WindowManager.LayoutParams.FLAG_DISMISS_KEYGUARD
             );
-        } catch (Exception e) { Log.e("WakeError", "Screen wake failed"); }
+        } catch (Exception e) { 
+            Log.e("WakeError", "Screen wake failed"); 
+        }
 
         setContentView(R.layout.activity_chat);
         audioManager = (AudioManager) getSystemService(Context.AUDIO_SERVICE);
@@ -165,14 +169,20 @@ public class ChatActivity extends AppCompatActivity {
             currentUserDocId = user.getUid();
             currentUserName = "User";
         }
-        if (currentUserDocId == null || currentUserDocId.isEmpty()) currentUserDocId = "TempUser_" + System.currentTimeMillis();
+        if (currentUserDocId == null || currentUserDocId.isEmpty()) {
+            currentUserDocId = "TempUser_" + System.currentTimeMillis();
+        }
 
         targetUserId = getIntent().getStringExtra("targetUserId");
         String targetName = getIntent().getStringExtra("targetUserName");
         chatSchoolId = getIntent().getStringExtra("schoolId"); 
-        if (chatSchoolId == null) chatSchoolId = "NA";
+        if (chatSchoolId == null) {
+            chatSchoolId = "NA";
+        }
 
-        if (targetUserId == null || targetUserId.isEmpty()) targetUserId = "Unknown";
+        if (targetUserId == null || targetUserId.isEmpty()) {
+            targetUserId = "Unknown";
+        }
         tvChatTitle.setText(targetName != null ? targetName : targetUserId);
 
         btnSend.setOnClickListener(v -> {
@@ -373,7 +383,7 @@ public class ChatActivity extends AppCompatActivity {
             PeerConnectionFactory.InitializationOptions initializationOptions =
                     PeerConnectionFactory.InitializationOptions.builder(this)
                             .setEnableInternalTracer(true)
-                            .createInitializationOptions(); // Removed H264 high profile for maximum compatibility
+                            .createInitializationOptions();
             PeerConnectionFactory.initialize(initializationOptions);
 
             rootEglBase = EglBase.create();
@@ -382,11 +392,12 @@ public class ChatActivity extends AppCompatActivity {
             localVideoView.setZOrderMediaOverlay(true);
             localVideoView.setMirror(true);
 
+            // 🔥 BLACK SCREEN ULTIMATE FIX: 'DefaultVideoEncoderFactory' me hardware acceleration 'false' kar diya
             PeerConnectionFactory.Options options = new PeerConnectionFactory.Options();
             peerConnectionFactory = PeerConnectionFactory.builder()
                     .setOptions(options)
-                    .setVideoDecoderFactory(new org.webrtc.DefaultVideoDecoderFactory(rootEglBase.getEglBaseContext()))
-                    .setVideoEncoderFactory(new org.webrtc.DefaultVideoEncoderFactory(rootEglBase.getEglBaseContext(), true, true))
+                    .setVideoDecoderFactory(new DefaultVideoDecoderFactory(rootEglBase.getEglBaseContext()))
+                    .setVideoEncoderFactory(new DefaultVideoEncoderFactory(rootEglBase.getEglBaseContext(), false, false))
                     .createPeerConnectionFactory();
         } catch (Exception e) {
             Log.e("WebRTC", "Init failed: " + e.getMessage());
@@ -403,7 +414,7 @@ public class ChatActivity extends AppCompatActivity {
                     VideoSource videoSource = peerConnectionFactory.createVideoSource(videoCapturer.isScreencast());
                     videoCapturer.initialize(surfaceTextureHelper, this, videoSource.getCapturerObserver());
                     
-                    // 🔥 BLACK SCREEN FIX: 320x240 @ 15fps (Saste/Keypad Phones ke liye)
+                    // 🔥 320x240 @ 15fps (Saste/Keypad Phones ke liye safe resolution)
                     videoCapturer.startCapture(320, 240, 15);
                     
                     localVideoTrack = peerConnectionFactory.createVideoTrack("100", videoSource);
@@ -443,6 +454,7 @@ public class ChatActivity extends AppCompatActivity {
             PeerConnection.RTCConfiguration rtcConfig = new PeerConnection.RTCConfiguration(iceServers);
             peerConnection = peerConnectionFactory.createPeerConnection(rtcConfig, new PeerConnection.Observer() {
                 @Override public void onSignalingChange(PeerConnection.SignalingState signalingState) {}
+                
                 @Override public void onIceConnectionChange(PeerConnection.IceConnectionState iceConnectionState) {
                     runOnUiThread(() -> {
                         if (iceConnectionState == PeerConnection.IceConnectionState.CONNECTED) {
@@ -452,9 +464,10 @@ public class ChatActivity extends AppCompatActivity {
                                 callTimer.start();
                                 callTimer.setVisibility(View.VISIBLE);
                             }
-                        } else if (iceConnectionState == PeerConnection.IceConnectionState.DISCONNECTED || 
-                                   iceConnectionState == PeerConnection.IceConnectionState.FAILED) {
-                            Toast.makeText(ChatActivity.this, "Call Ended / Network Failed", Toast.LENGTH_SHORT).show();
+                        } 
+                        // 🔥 AUTO DISCONNECT FIX: DISCONNECTED par call nahi katega, sirf completely FAILED hone par hi katega.
+                        else if (iceConnectionState == PeerConnection.IceConnectionState.FAILED) {
+                            Toast.makeText(ChatActivity.this, "Network Dropped!", Toast.LENGTH_SHORT).show();
                             endCall();
                         }
                     });
@@ -462,6 +475,7 @@ public class ChatActivity extends AppCompatActivity {
                 
                 @Override public void onIceConnectionReceivingChange(boolean b) {}
                 @Override public void onIceGatheringChange(PeerConnection.IceGatheringState iceGatheringState) {}
+                
                 @Override
                 public void onIceCandidate(IceCandidate iceCandidate) {
                     Map<String, Object> candidateData = new HashMap<>();
@@ -472,11 +486,16 @@ public class ChatActivity extends AppCompatActivity {
                     String target = incomingCallerId.isEmpty() ? targetUserId : incomingCallerId;
                     db.collection("calls").document(target).collection("candidates").add(candidateData);
                 }
+                
                 @Override public void onIceCandidatesRemoved(IceCandidate[] iceCandidates) {}
+                
                 @Override
                 public void onAddStream(MediaStream mediaStream) {
-                    if (mediaStream.videoTracks.size() > 0) runOnUiThread(() -> mediaStream.videoTracks.get(0).addSink(remoteVideoView));
+                    if (mediaStream.videoTracks.size() > 0) {
+                        runOnUiThread(() -> mediaStream.videoTracks.get(0).addSink(remoteVideoView));
+                    }
                 }
+                
                 @Override public void onRemoveStream(MediaStream mediaStream) {}
                 @Override public void onDataChannel(DataChannel dataChannel) {}
                 @Override public void onRenegotiationNeeded() {}
@@ -639,21 +658,34 @@ public class ChatActivity extends AppCompatActivity {
     @Override
     protected void onStop() {
         super.onStop();
-        if (!isCallActive) stopRingtone();
+        if (!isCallActive) {
+            stopRingtone();
+        }
     }
 
     @Override
     protected void onDestroy() {
         super.onDestroy();
         endCall();
-        if (localVideoView != null) localVideoView.release();
-        if (remoteVideoView != null) remoteVideoView.release();
+        if (localVideoView != null) {
+            localVideoView.release();
+        }
+        if (remoteVideoView != null) {
+            remoteVideoView.release();
+        }
     }
 
     private static class SimpleSdpObserver implements SdpObserver {
-        @Override public void onCreateSuccess(SessionDescription sessionDescription) {}
-        @Override public void onSetSuccess() {}
-        @Override public void onCreateFailure(String s) {}
-        @Override public void onSetFailure(String s) {}
+        @Override 
+        public void onCreateSuccess(SessionDescription sessionDescription) {}
+        
+        @Override 
+        public void onSetSuccess() {}
+        
+        @Override 
+        public void onCreateFailure(String s) {}
+        
+        @Override 
+        public void onSetFailure(String s) {}
     }
 }
