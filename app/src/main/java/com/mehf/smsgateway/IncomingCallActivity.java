@@ -12,6 +12,7 @@ import android.view.WindowManager;
 import android.widget.Button;
 import android.widget.LinearLayout;
 import android.widget.TextView;
+import android.widget.Toast; // 🔥 CRITICAL FIX: Toast import yahan joda gaya hai
 import androidx.appcompat.app.AppCompatActivity;
 
 import com.google.firebase.auth.FirebaseAuth;
@@ -29,7 +30,7 @@ public class IncomingCallActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         
-        // 🔥 WAKE UP SCREEN ON LOCK
+        // Wake up screen on lock
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
             setShowWhenLocked(true);
             setTurnScreenOn(true);
@@ -45,11 +46,11 @@ public class IncomingCallActivity extends AppCompatActivity {
         roomName = getIntent().getStringExtra("roomName");
         isVideo = getIntent().getBooleanExtra("isVideo", true);
 
-        // 🔥 FULL SCREEN CALL UI (No XML Needed)
+        // Full screen incoming call UI layout
         LinearLayout layout = new LinearLayout(this);
         layout.setOrientation(LinearLayout.VERTICAL);
         layout.setGravity(Gravity.CENTER);
-        layout.setBackgroundColor(Color.parseColor("#1e3c72")); // Blue background
+        layout.setBackgroundColor(Color.parseColor("#1e3c72"));
 
         TextView tvTitle = new TextView(this);
         tvTitle.setText((isVideo ? "📹 Video Call\n" : "📞 Voice Call\n") + "From: " + callerId);
@@ -86,7 +87,6 @@ public class IncomingCallActivity extends AppCompatActivity {
 
         startRingtone();
 
-        // Listen for Remote Disconnect (Agar samne wale ne call kaat di)
         if (FirebaseAuth.getInstance().getCurrentUser() != null) {
             currentUserDocId = FirebaseAuth.getInstance().getCurrentUser().getEmail().split("@")[0];
             FirebaseFirestore.getInstance().collection("calls").document(currentUserDocId)
@@ -100,8 +100,8 @@ public class IncomingCallActivity extends AppCompatActivity {
         FirebaseFirestore.getInstance().collection("calls").document(currentUserDocId).delete();
         stopRingtone();
         try {
-            org.jitsi.meet.sdk.JitsiMeetConferenceOptions options = new org.jitsi.meet.sdk.JitsiMeetConferenceOptions.Builder()
-                    .setServerURL(new java.net.URL("https://meet.ffmuc.net"))
+            JitsiMeetConferenceOptions options = new JitsiMeetConferenceOptions.Builder()
+                    .setServerURL(new URL("https://meet.ffmuc.net"))
                     .setRoom(roomName)
                     .setAudioMuted(false)
                     .setVideoMuted(!isVideo)
@@ -111,7 +111,7 @@ public class IncomingCallActivity extends AppCompatActivity {
                     .setFeatureFlag("welcomepage.enabled", false)
                     .setFeatureFlag("tile-view.enabled", true)
                     .build();
-            org.jitsi.meet.sdk.JitsiMeetActivity.launch(this, options);
+            JitsiMeetActivity.launch(this, options);
         } catch (Exception e) {
             Toast.makeText(this, "Accept Error: " + e.getMessage(), Toast.LENGTH_SHORT).show();
         }
@@ -119,7 +119,9 @@ public class IncomingCallActivity extends AppCompatActivity {
     }
 
     private void declineCall() {
-        FirebaseFirestore.getInstance().collection("calls").document(currentUserDocId).delete();
+        if (currentUserDocId != null) {
+            FirebaseFirestore.getInstance().collection("calls").document(currentUserDocId).delete();
+        }
         finishCall();
     }
 
