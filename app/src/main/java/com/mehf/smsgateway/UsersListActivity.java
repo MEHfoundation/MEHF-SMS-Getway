@@ -140,8 +140,11 @@ public class UsersListActivity extends AppCompatActivity {
                             .setRoom(roomName)
                             .setAudioMuted(false)
                             .setVideoMuted(false)
-                            .setFeatureFlag("prejoinpage.enabled", false) // 🔥 Staff Meeting me bhi direct join
+                            .setSubject("MEHF Staff Meeting")
+                            .setFeatureFlag("prejoinpage.enabled", false)
                             .setFeatureFlag("invite.enabled", true)
+                            .setFeatureFlag("welcomepage.enabled", false)
+                            .setFeatureFlag("tile-view.enabled", true)
                             .build();
                     org.jitsi.meet.sdk.JitsiMeetActivity.launch(this, options);
                 } catch (Exception e) {
