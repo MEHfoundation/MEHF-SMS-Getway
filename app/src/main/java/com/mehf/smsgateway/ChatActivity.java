@@ -1,94 +1,52 @@
 package com.mehf.smsgateway;
 
-import android.Manifest;
 import android.app.KeyguardManager;
 import android.content.Context;
-import android.content.pm.PackageManager;
 import android.graphics.Color;
 import android.graphics.drawable.GradientDrawable;
-import android.media.AudioManager;
 import android.media.MediaPlayer;
 import android.media.RingtoneManager;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
-import android.os.SystemClock;
-import android.util.Log;
 import android.view.Gravity;
 import android.view.View;
 import android.view.WindowManager;
 import android.widget.Button;
-import android.widget.Chronometer;
 import android.widget.EditText;
 import android.widget.ImageButton;
 import android.widget.LinearLayout;
-import android.widget.RelativeLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
 import androidx.appcompat.app.AppCompatActivity;
-import androidx.core.app.ActivityCompat;
-import androidx.core.content.ContextCompat;
 
 import com.google.firebase.firestore.DocumentChange;
 import com.google.firebase.firestore.FirebaseFirestore;
 import com.google.firebase.firestore.Query;
 
-import org.webrtc.AudioSource;
-import org.webrtc.AudioTrack;
-import org.webrtc.Camera1Enumerator;
-import org.webrtc.Camera2Enumerator;
-import org.webrtc.CameraEnumerator;
-import org.webrtc.DataChannel;
-import org.webrtc.DefaultVideoDecoderFactory;
-import org.webrtc.DefaultVideoEncoderFactory;
-import org.webrtc.EglBase;
-import org.webrtc.IceCandidate;
-import org.webrtc.MediaConstraints;
-import org.webrtc.MediaStream;
-import org.webrtc.PeerConnection;
-import org.webrtc.PeerConnectionFactory;
-import org.webrtc.SdpObserver;
-import org.webrtc.SessionDescription;
-import org.webrtc.SurfaceTextureHelper;
-import org.webrtc.SurfaceViewRenderer;
-import org.webrtc.VideoCapturer;
-import org.webrtc.VideoSource;
-import org.webrtc.VideoTrack;
+import org.jitsi.meet.sdk.JitsiMeetActivity;
+import org.jitsi.meet.sdk.JitsiMeetConferenceOptions;
 
+import java.net.URL;
 import java.text.SimpleDateFormat;
-import java.util.ArrayList;
 import java.util.Date;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 
 public class ChatActivity extends AppCompatActivity {
 
     private EditText etMessage;
-    private Button btnSend, btnEndCall, btnAcceptCall, btnDeclineCall;
+    private Button btnSend, btnAcceptCall, btnDeclineCall;
     private ImageButton btnVoiceCall, btnVideoCall;
     private LinearLayout chatListLayout, incomingCallLayout;
     private ScrollView chatScrollView;
-    private RelativeLayout videoCallContainer;
     private TextView tvChatTitle, tvIncomingCallTitle;
-    private Chronometer callTimer; 
     private FirebaseFirestore db;
-    private AudioManager audioManager;
     
-    private SurfaceViewRenderer localVideoView;
-    private SurfaceViewRenderer remoteVideoView;
-    private EglBase rootEglBase;
-    private PeerConnectionFactory peerConnectionFactory;
-    private PeerConnection peerConnection;
-    private VideoTrack localVideoTrack;
-    private AudioTrack localAudioTrack;
-    private SurfaceTextureHelper surfaceTextureHelper;
-    private VideoCapturer videoCapturer;
-
     private String incomingCallerId = "";
-    private String incomingSdp = "";
+    private String incomingRoomName = "";
     private boolean isIncomingVideo = false;
     private MediaPlayer ringtonePlayer; 
     
@@ -116,7 +74,6 @@ public class ChatActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
-        // 🔥 PERFECT SCREEN WAKE (No Battery Drain, Only wakes on call)
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
                 setShowWhenLocked(true);
@@ -129,18 +86,9 @@ public class ChatActivity extends AppCompatActivity {
                     WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON |
                     WindowManager.LayoutParams.FLAG_DISMISS_KEYGUARD
             );
-        } catch (Exception e) { 
-            Log.e("WakeError", "Screen wake failed"); 
-        }
+        } catch (Exception e) {}
 
         setContentView(R.layout.activity_chat);
-        audioManager = (AudioManager) getSystemService(Context.AUDIO_SERVICE);
-
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED ||
-            ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
-            ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.CAMERA, Manifest.permission.RECORD_AUDIO}, 100);
-        }
-
         db = FirebaseFirestore.getInstance();
         
         etMessage = findViewById(R.id.etMessage);
@@ -149,11 +97,6 @@ public class ChatActivity extends AppCompatActivity {
         chatScrollView = findViewById(R.id.chatScrollView);
         btnVoiceCall = findViewById(R.id.btnVoiceCall);
         btnVideoCall = findViewById(R.id.btnVideoCall);
-        btnEndCall = findViewById(R.id.btnEndCall);
-        videoCallContainer = findViewById(R.id.videoCallContainer);
-        localVideoView = findViewById(R.id.localVideoView);
-        remoteVideoView = findViewById(R.id.remoteVideoView);
-        callTimer = findViewById(R.id.callTimer);
         
         incomingCallLayout = findViewById(R.id.incomingCallLayout);
         tvIncomingCallTitle = findViewById(R.id.tvIncomingCallTitle);
@@ -176,13 +119,9 @@ public class ChatActivity extends AppCompatActivity {
         targetUserId = getIntent().getStringExtra("targetUserId");
         String targetName = getIntent().getStringExtra("targetUserName");
         chatSchoolId = getIntent().getStringExtra("schoolId"); 
-        if (chatSchoolId == null) {
-            chatSchoolId = "NA";
-        }
-
-        if (targetUserId == null || targetUserId.isEmpty()) {
-            targetUserId = "Unknown";
-        }
+        if (chatSchoolId == null) chatSchoolId = "NA";
+        if (targetUserId == null || targetUserId.isEmpty()) targetUserId = "Unknown";
+        
         tvChatTitle.setText(targetName != null ? targetName : targetUserId);
 
         btnSend.setOnClickListener(v -> {
@@ -194,7 +133,6 @@ public class ChatActivity extends AppCompatActivity {
         });
         
         listenForLiveMessages();
-        initWebRTC();
 
         if (targetUserId.equals("AI") || targetUserId.startsWith("group_")) {
             btnVideoCall.setVisibility(View.GONE);
@@ -206,49 +144,11 @@ public class ChatActivity extends AppCompatActivity {
             btnVoiceCall.setOnClickListener(v -> startCall(false));
         }
         
-        btnEndCall.setOnClickListener(v -> endCall());
-        
-        // 🔥 CRASH-PROOF: CALL ACCEPT LOGIC
         btnAcceptCall.setOnClickListener(v -> { 
-            try {
-                isCallActive = true; 
-                stopRingtone(); 
-                
-                incomingCallLayout.setVisibility(View.GONE);
-                videoCallContainer.setVisibility(View.VISIBLE);
-                
-                // Screen ko active call ke dauran hamesha ON rakhein
-                getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
-                
-                // 🔥 ANTI-LOOP FIREWALL: Status update karke loop block karein
-                db.collection("calls").document(currentUserDocId).update("type", "in-progress");
-
-                if(audioManager != null) {
-                    audioManager.setMode(AudioManager.MODE_IN_COMMUNICATION);
-                    audioManager.setSpeakerphoneOn(isIncomingVideo);
-                    audioManager.setMicrophoneMute(false);
-                }
-
-                startLocalStream(isIncomingVideo);
-                createPeerConnection();
-
-                peerConnection.setRemoteDescription(new SimpleSdpObserver(), new SessionDescription(SessionDescription.Type.OFFER, incomingSdp));
-                
-                peerConnection.createAnswer(new SimpleSdpObserver() {
-                    @Override
-                    public void onCreateSuccess(SessionDescription sessionDescription) {
-                        peerConnection.setLocalDescription(new SimpleSdpObserver(), sessionDescription);
-                        Map<String, Object> answerData = new HashMap<>();
-                        answerData.put("type", "answer");
-                        answerData.put("sdp", sessionDescription.description);
-                        db.collection("calls").document(incomingCallerId).set(answerData);
-                    }
-                }, new MediaConstraints());
-
-            } catch (Exception e) {
-                Toast.makeText(this, "Accept Call Error: " + e.getMessage(), Toast.LENGTH_LONG).show();
-                endCall();
-            }
+            stopRingtone(); 
+            incomingCallLayout.setVisibility(View.GONE);
+            db.collection("calls").document(currentUserDocId).update("type", "in-progress");
+            launchJitsiMeet(incomingRoomName, isIncomingVideo);
         });
         
         btnDeclineCall.setOnClickListener(v -> { 
@@ -278,7 +178,6 @@ public class ChatActivity extends AppCompatActivity {
           .limitToLast(50) 
           .addSnapshotListener((snapshots, e) -> {
               if (e != null || snapshots == null) return;
-              
               for (DocumentChange dc : snapshots.getDocumentChanges()) {
                   String docId = dc.getDocument().getId();
                   String msg = dc.getDocument().getString("message");
@@ -293,7 +192,6 @@ public class ChatActivity extends AppCompatActivity {
                       (receiverId.equals(targetUserId) && targetUserId.startsWith("group_"))) {
                       
                       if (dc.getType() == DocumentChange.Type.ADDED) {
-                          // 🔥 BACKGROUND READ FIX: Jab tak chat page open na ho, 'read' mark mat karo
                           if (!senderId.equals(currentUserDocId)) {
                               if (isActivityVisible && !"read".equals(status)) {
                                   db.collection("chats").document(docId).update("status", "read");
@@ -378,184 +276,40 @@ public class ChatActivity extends AppCompatActivity {
         }
     }
 
-    private void initWebRTC() {
-        try {
-            PeerConnectionFactory.InitializationOptions initializationOptions =
-                    PeerConnectionFactory.InitializationOptions.builder(this)
-                            .setEnableInternalTracer(true)
-                            .createInitializationOptions();
-            PeerConnectionFactory.initialize(initializationOptions);
-
-            rootEglBase = EglBase.create();
-            localVideoView.init(rootEglBase.getEglBaseContext(), null);
-            remoteVideoView.init(rootEglBase.getEglBaseContext(), null);
-            localVideoView.setZOrderMediaOverlay(true);
-            localVideoView.setMirror(true);
-
-            // 🔥 BLACK SCREEN ULTIMATE FIX: 'DefaultVideoEncoderFactory' me hardware acceleration 'false' kar diya
-            PeerConnectionFactory.Options options = new PeerConnectionFactory.Options();
-            peerConnectionFactory = PeerConnectionFactory.builder()
-                    .setOptions(options)
-                    .setVideoDecoderFactory(new DefaultVideoDecoderFactory(rootEglBase.getEglBaseContext()))
-                    .setVideoEncoderFactory(new DefaultVideoEncoderFactory(rootEglBase.getEglBaseContext(), false, false))
-                    .createPeerConnectionFactory();
-        } catch (Exception e) {
-            Log.e("WebRTC", "Init failed: " + e.getMessage());
-        }
-    }
-
-    private void startLocalStream(boolean isVideo) {
-        try {
-            if (peerConnectionFactory == null) return;
-            if (isVideo) {
-                videoCapturer = createVideoCapturer();
-                if (videoCapturer != null) {
-                    surfaceTextureHelper = SurfaceTextureHelper.create("CaptureThread", rootEglBase.getEglBaseContext());
-                    VideoSource videoSource = peerConnectionFactory.createVideoSource(videoCapturer.isScreencast());
-                    videoCapturer.initialize(surfaceTextureHelper, this, videoSource.getCapturerObserver());
-                    
-                    // 🔥 320x240 @ 15fps (Saste/Keypad Phones ke liye safe resolution)
-                    videoCapturer.startCapture(320, 240, 15);
-                    
-                    localVideoTrack = peerConnectionFactory.createVideoTrack("100", videoSource);
-                    localVideoTrack.addSink(localVideoView);
-                }
-            }
-            AudioSource audioSource = peerConnectionFactory.createAudioSource(new MediaConstraints());
-            localAudioTrack = peerConnectionFactory.createAudioTrack("101", audioSource);
-        } catch (Exception e) {
-            Toast.makeText(this, "Camera/Mic Error: " + e.getMessage(), Toast.LENGTH_LONG).show();
-        }
-    }
-
-    private VideoCapturer createVideoCapturer() {
-        CameraEnumerator enumerator = Camera2Enumerator.isSupported(this) ? new Camera2Enumerator(this) : new Camera1Enumerator(true);
-        for (String deviceName : enumerator.getDeviceNames()) {
-            if (enumerator.isFrontFacing(deviceName)) return enumerator.createCapturer(deviceName, null);
-        }
-        return null;
-    }
-
-    private void createPeerConnection() {
-        try {
-            if (peerConnectionFactory == null) return;
-            List<PeerConnection.IceServer> iceServers = new ArrayList<>();
-            
-            // 🔥 NETWORK FIX: 4 Google STUN Servers + 1 TURN Server for unbreakable connection
-            iceServers.add(PeerConnection.IceServer.builder("stun:stun.l.google.com:19302").createIceServer());
-            iceServers.add(PeerConnection.IceServer.builder("stun:stun1.l.google.com:19302").createIceServer());
-            iceServers.add(PeerConnection.IceServer.builder("stun:stun2.l.google.com:19302").createIceServer());
-            iceServers.add(PeerConnection.IceServer.builder("stun:stun3.l.google.com:19302").createIceServer());
-
-            PeerConnection.IceServer turnServer = PeerConnection.IceServer.builder("turn:global.relay.metered.ca:80")
-                    .setUsername("83226dbb4cd1e1df591d3101").setPassword("83226dbb4cd1e1df591d3101").createIceServer();
-            iceServers.add(turnServer);
-
-            PeerConnection.RTCConfiguration rtcConfig = new PeerConnection.RTCConfiguration(iceServers);
-            peerConnection = peerConnectionFactory.createPeerConnection(rtcConfig, new PeerConnection.Observer() {
-                @Override public void onSignalingChange(PeerConnection.SignalingState signalingState) {}
-                
-                @Override public void onIceConnectionChange(PeerConnection.IceConnectionState iceConnectionState) {
-                    runOnUiThread(() -> {
-                        if (iceConnectionState == PeerConnection.IceConnectionState.CONNECTED) {
-                            stopRingtone(); 
-                            if(callTimer != null) {
-                                callTimer.setBase(SystemClock.elapsedRealtime());
-                                callTimer.start();
-                                callTimer.setVisibility(View.VISIBLE);
-                            }
-                        } 
-                        // 🔥 AUTO DISCONNECT FIX: DISCONNECTED par call nahi katega, sirf completely FAILED hone par hi katega.
-                        else if (iceConnectionState == PeerConnection.IceConnectionState.FAILED) {
-                            Toast.makeText(ChatActivity.this, "Network Dropped!", Toast.LENGTH_SHORT).show();
-                            endCall();
-                        }
-                    });
-                }
-                
-                @Override public void onIceConnectionReceivingChange(boolean b) {}
-                @Override public void onIceGatheringChange(PeerConnection.IceGatheringState iceGatheringState) {}
-                
-                @Override
-                public void onIceCandidate(IceCandidate iceCandidate) {
-                    Map<String, Object> candidateData = new HashMap<>();
-                    candidateData.put("type", "candidate");
-                    candidateData.put("sdpMid", iceCandidate.sdpMid);
-                    candidateData.put("sdpMLineIndex", iceCandidate.sdpMLineIndex);
-                    candidateData.put("sdp", iceCandidate.sdp);
-                    String target = incomingCallerId.isEmpty() ? targetUserId : incomingCallerId;
-                    db.collection("calls").document(target).collection("candidates").add(candidateData);
-                }
-                
-                @Override public void onIceCandidatesRemoved(IceCandidate[] iceCandidates) {}
-                
-                @Override
-                public void onAddStream(MediaStream mediaStream) {
-                    if (mediaStream.videoTracks.size() > 0) {
-                        runOnUiThread(() -> mediaStream.videoTracks.get(0).addSink(remoteVideoView));
-                    }
-                }
-                
-                @Override public void onRemoveStream(MediaStream mediaStream) {}
-                @Override public void onDataChannel(DataChannel dataChannel) {}
-                @Override public void onRenegotiationNeeded() {}
-            });
-
-            if (localVideoTrack != null) peerConnection.addTrack(localVideoTrack);
-            if (localAudioTrack != null) peerConnection.addTrack(localAudioTrack);
-        } catch (Exception e) {
-            Toast.makeText(this, "Connection Error: " + e.getMessage(), Toast.LENGTH_LONG).show();
-        }
-    }
-
     private void startCall(boolean isVideo) {
+        String roomName = "MEHF_Call_" + currentUserDocId + "_" + targetUserId;
+        
+        // Firebase me call ki request bhejein
+        Map<String, Object> callData = new HashMap<>();
+        callData.put("callerId", currentUserDocId);
+        callData.put("targetId", targetUserId);
+        callData.put("type", "jitsi_offer");
+        callData.put("roomName", roomName);
+        callData.put("isVideo", isVideo);
+        callData.put("timestamp", System.currentTimeMillis());
+        db.collection("calls").document(targetUserId).set(callData);
+
+        // Native Jitsi Meeting Shuru karein
+        launchJitsiMeet(roomName, isVideo);
+    }
+
+    private void launchJitsiMeet(String roomName, boolean isVideo) {
         try {
-            if (peerConnectionFactory == null) {
-                Toast.makeText(this, "WebRTC Not Ready! Grant Permissions.", Toast.LENGTH_SHORT).show();
-                return;
-            }
-            
-            isCallActive = true;
-            videoCallContainer.setVisibility(View.VISIBLE);
-            getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
-            
-            Toast.makeText(this, "Calling...", Toast.LENGTH_SHORT).show();
-            
-            if(audioManager != null) {
-                audioManager.setMode(AudioManager.MODE_IN_COMMUNICATION);
-                audioManager.setSpeakerphoneOn(isVideo);
-            }
-
-            startLocalStream(isVideo);
-            createPeerConnection();
-
-            MediaConstraints constraints = new MediaConstraints();
-            constraints.mandatory.add(new MediaConstraints.KeyValuePair("OfferToReceiveAudio", "true"));
-            constraints.mandatory.add(new MediaConstraints.KeyValuePair("OfferToReceiveVideo", isVideo ? "true" : "false"));
-
-            peerConnection.createOffer(new SimpleSdpObserver() {
-                @Override
-                public void onCreateSuccess(SessionDescription sessionDescription) {
-                    peerConnection.setLocalDescription(new SimpleSdpObserver(), sessionDescription);
-                    Map<String, Object> callData = new HashMap<>();
-                    callData.put("callerId", currentUserDocId);
-                    callData.put("targetId", targetUserId);
-                    callData.put("type", "offer");
-                    callData.put("isVideo", isVideo);
-                    callData.put("timestamp", System.currentTimeMillis());
-                    callData.put("sdp", sessionDescription.description);
-                    db.collection("calls").document(targetUserId).set(callData);
-                }
-            }, constraints);
+            JitsiMeetConferenceOptions options = new JitsiMeetConferenceOptions.Builder()
+                    .setServerURL(new URL("https://meet.jit.si"))
+                    .setRoom(roomName)
+                    .setAudioMuted(!isVideo) 
+                    .setVideoMuted(!isVideo) 
+                    .build();
+            JitsiMeetActivity.launch(this, options);
         } catch (Exception e) {
-            Toast.makeText(this, "Call Failed: " + e.getMessage(), Toast.LENGTH_LONG).show();
+            Toast.makeText(this, "Call Start Error: " + e.getMessage(), Toast.LENGTH_SHORT).show();
         }
     }
 
     private void listenForIncomingSignals() {
         db.collection("calls").document(currentUserDocId)
           .addSnapshotListener((snapshot, e) -> {
-              // 🔥 YAHAN FIREWALL LAGA DIYA: Agar Call Active hai, toh aage ka process rok do
               if (isCallActive) return;
 
               if (snapshot == null || !snapshot.exists()) {
@@ -567,36 +321,16 @@ public class ChatActivity extends AppCompatActivity {
               }
               
               String type = snapshot.getString("type");
-              String sdpStr = snapshot.getString("sdp");
-
-              if ("offer".equals(type)) {
+              
+              if ("jitsi_offer".equals(type)) {
                   incomingCallerId = snapshot.getString("callerId");
+                  incomingRoomName = snapshot.getString("roomName");
                   isIncomingVideo = snapshot.getBoolean("isVideo") != null ? snapshot.getBoolean("isVideo") : true;
-                  incomingSdp = sdpStr;
                   
                   if (!isCallActive) {
                       incomingCallLayout.setVisibility(View.VISIBLE);
                       tvIncomingCallTitle.setText((isIncomingVideo ? "📹 Video Call" : "📞 Voice Call") + "\nFrom: " + incomingCallerId);
                       startRingtone();
-                  }
-                  
-              } else if ("answer".equals(type)) {
-                  if (peerConnection != null) {
-                      peerConnection.setRemoteDescription(new SimpleSdpObserver(), new SessionDescription(SessionDescription.Type.ANSWER, sdpStr));
-                  }
-              }
-          });
-
-        db.collection("calls").document(currentUserDocId).collection("candidates")
-          .addSnapshotListener((snapshots, e) -> {
-              if (e != null || snapshots == null) return;
-              for (DocumentChange dc : snapshots.getDocumentChanges()) {
-                  if (dc.getType() == DocumentChange.Type.ADDED) {
-                      String sdp = dc.getDocument().getString("sdp");
-                      int sdpMLineIndex = dc.getDocument().getLong("sdpMLineIndex").intValue();
-                      String sdpMid = dc.getDocument().getString("sdpMid");
-                      IceCandidate candidate = new IceCandidate(sdpMid, sdpMLineIndex, sdp);
-                      if (peerConnection != null) peerConnection.addIceCandidate(candidate);
                   }
               }
           });
@@ -622,70 +356,15 @@ public class ChatActivity extends AppCompatActivity {
         }
     }
 
-    private void endCall() {
-        isCallActive = false;
-        stopRingtone(); 
-        
-        // 🔥 REMOVE SCREEN ON LOCK
-        getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
-        
-        if (audioManager != null) {
-            audioManager.setMode(AudioManager.MODE_NORMAL); 
-            audioManager.setSpeakerphoneOn(false);
-        }
-
-        if (callTimer != null) {
-            callTimer.stop(); 
-            callTimer.setVisibility(View.GONE);
-        }
-        
-        videoCallContainer.setVisibility(View.GONE);
-        incomingCallLayout.setVisibility(View.GONE);
-        
-        if (peerConnection != null) { peerConnection.close(); peerConnection = null; }
-        if (videoCapturer != null) {
-            try { videoCapturer.stopCapture(); } catch (InterruptedException e) {}
-            videoCapturer.dispose(); videoCapturer = null;
-        }
-        if (surfaceTextureHelper != null) { surfaceTextureHelper.dispose(); surfaceTextureHelper = null; }
-        
-        String target = incomingCallerId.isEmpty() ? targetUserId : incomingCallerId;
-        db.collection("calls").document(target).delete(); 
-        db.collection("calls").document(currentUserDocId).delete();
-        incomingCallerId = "";
-    }
-
     @Override
     protected void onStop() {
         super.onStop();
-        if (!isCallActive) {
-            stopRingtone();
-        }
+        if (!isCallActive) stopRingtone();
     }
 
     @Override
     protected void onDestroy() {
         super.onDestroy();
-        endCall();
-        if (localVideoView != null) {
-            localVideoView.release();
-        }
-        if (remoteVideoView != null) {
-            remoteVideoView.release();
-        }
-    }
-
-    private static class SimpleSdpObserver implements SdpObserver {
-        @Override 
-        public void onCreateSuccess(SessionDescription sessionDescription) {}
-        
-        @Override 
-        public void onSetSuccess() {}
-        
-        @Override 
-        public void onCreateFailure(String s) {}
-        
-        @Override 
-        public void onSetFailure(String s) {}
+        stopRingtone();
     }
 }
