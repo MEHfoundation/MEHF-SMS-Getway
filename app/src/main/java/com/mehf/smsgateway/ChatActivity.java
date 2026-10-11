@@ -341,15 +341,19 @@ public class ChatActivity extends AppCompatActivity {
 
     private void launchJitsiMeet(String roomName, boolean isVideo) {
         try {
-            JitsiMeetConferenceOptions options = new JitsiMeetConferenceOptions.Builder()
-                    .setServerURL(new URL("https://meet.ffmuc.net"))
+            org.jitsi.meet.sdk.JitsiMeetConferenceOptions options = new org.jitsi.meet.sdk.JitsiMeetConferenceOptions.Builder()
+                    .setServerURL(new java.net.URL("https://meet.ffmuc.net"))
                     .setRoom(roomName)
-                    .setAudioMuted(false) // Voice humesha chalu
-                    .setVideoMuted(!isVideo) 
-                    .setFeatureFlag("prejoinpage.enabled", false) // 🔥 Direct WhatsApp jaisi call (No Join Page)
+                    .setAudioMuted(false)
+                    .setVideoMuted(!isVideo)
+                    // 🔥 CRITICAL FIX: Bina kisi login aur pre-join ke direct entry ke liye
+                    .setSubject("MEHF Secure Call")
+                    .setFeatureFlag("prejoinpage.enabled", false)
                     .setFeatureFlag("invite.enabled", true)
+                    .setFeatureFlag("welcomepage.enabled", false)
+                    .setFeatureFlag("tile-view.enabled", true)
                     .build();
-            JitsiMeetActivity.launch(this, options);
+            org.jitsi.meet.sdk.JitsiMeetActivity.launch(this, options);
         } catch (Exception e) {
             Toast.makeText(this, "Call Start Error: " + e.getMessage(), Toast.LENGTH_SHORT).show();
         }
