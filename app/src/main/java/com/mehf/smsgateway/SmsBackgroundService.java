@@ -46,7 +46,7 @@ public class SmsBackgroundService extends Service implements TextToSpeech.OnInit
     @Override
     public void onInit(int status) {
         if (status == TextToSpeech.SUCCESS) {
-            tts.setLanguage(new Locale("hi", "IN"));
+            tts.setLanguage(new Locale("hi", "IN")); // Hindi set kiya
             isTtsReady = true;
         }
     }
@@ -63,7 +63,7 @@ public class SmsBackgroundService extends Service implements TextToSpeech.OnInit
         
         String myId = user.getEmail() != null ? user.getEmail().split("@")[0] : user.getUid();
         
-        // 🔥 MESSAGE NOTIFICATION & DELIVERED TICK FIX
+        // 🔥 SMART TTS: Message Read Logic
         FirebaseFirestore.getInstance().collection("chats")
             .whereEqualTo("receiverId", myId)
             .addSnapshotListener((snaps, e) -> {
@@ -73,18 +73,18 @@ public class SmsBackgroundService extends Service implements TextToSpeech.OnInit
                     String status = dc.getDocument().getString("status");
                     
                     if (dc.getType() == DocumentChange.Type.ADDED) {
-                        // Agar naya message 'sent' hai, to background me usko 'delivered' karo
                         if ("sent".equals(status)) {
                             FirebaseFirestore.getInstance().collection("chats").document(docId).update("status", "delivered");
                             
-                            // 🔥 Background Notification & Voice Alert
                             Long tsObj = dc.getDocument().getLong("timestamp");
                             long msgTime = tsObj != null ? tsObj : 0;
                             if (System.currentTimeMillis() - msgTime < 15000) {
                                 String msg = dc.getDocument().getString("message");
                                 String sender = dc.getDocument().getString("senderName");
                                 showPopUpNotification(sender, msg);
-                                speak("नया मैसेज आया है, " + sender + " से");
+                                
+                                // 🔥 Yahan Badlav Kiya Hai: Ab seedha Message Padhega
+                                speak(sender + " का मैसेज है: " + msg);
                             }
                         }
                     }
