@@ -45,7 +45,7 @@ public class UsersListActivity extends AppCompatActivity {
 
     private Map<String, Long> latestMessageTimeMap = new HashMap<>();
     private Map<String, Integer> unreadCountMap = new HashMap<>();
-    private LinearLayout mainLayout; // Declared globally for adding button
+    private LinearLayout mainLayout;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -113,6 +113,9 @@ public class UsersListActivity extends AppCompatActivity {
         });
 
         fetchCurrentUserRoleAndLoadContacts();
+
+        // 🔥 CRITICAL FIX: App start hote hi Background Call Service chalu karein
+        startService(new Intent(this, CallBackgroundService.class));
     }
 
     private void addStaffMeetingButton() {
@@ -127,7 +130,7 @@ public class UsersListActivity extends AppCompatActivity {
             meetingParams.setMargins(0, 20, 0, 20);
             btnMeeting.setLayoutParams(meetingParams);
             
-            mainLayout.addView(btnMeeting, 2); // Adds button right after Search Box
+            mainLayout.addView(btnMeeting, 2);
 
             btnMeeting.setOnClickListener(v -> {
                 try {
@@ -137,6 +140,8 @@ public class UsersListActivity extends AppCompatActivity {
                             .setRoom(roomName)
                             .setAudioMuted(false)
                             .setVideoMuted(false)
+                            .setFeatureFlag("prejoinpage.enabled", false) // 🔥 Staff Meeting me bhi direct join
+                            .setFeatureFlag("invite.enabled", true)
                             .build();
                     org.jitsi.meet.sdk.JitsiMeetActivity.launch(this, options);
                 } catch (Exception e) {
