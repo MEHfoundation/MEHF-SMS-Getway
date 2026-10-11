@@ -4,7 +4,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.graphics.Color;
-import android.graphics.drawable.GradientDrawable; // 🔥 YAHAN IMPORT ADD KIYA GAYA HAI
+import android.graphics.drawable.GradientDrawable;
 import android.os.Bundle;
 import android.text.Editable;
 import android.text.TextWatcher;
@@ -45,6 +45,7 @@ public class UsersListActivity extends AppCompatActivity {
 
     private Map<String, Long> latestMessageTimeMap = new HashMap<>();
     private Map<String, Integer> unreadCountMap = new HashMap<>();
+    private LinearLayout mainLayout; // Declared globally for adding button
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -57,7 +58,7 @@ public class UsersListActivity extends AppCompatActivity {
         ScrollView scrollView = new ScrollView(this);
         scrollView.setBackgroundColor(Color.parseColor("#F4F6F9"));
         
-        LinearLayout mainLayout = new LinearLayout(this);
+        mainLayout = new LinearLayout(this);
         mainLayout.setOrientation(LinearLayout.VERTICAL);
         mainLayout.setPadding(40, 40, 40, 40);
         scrollView.addView(mainLayout);
@@ -114,6 +115,37 @@ public class UsersListActivity extends AppCompatActivity {
         fetchCurrentUserRoleAndLoadContacts();
     }
 
+    private void addStaffMeetingButton() {
+        if (currentUserRole.equals("admin") || currentUserRole.equals("school") || currentUserRole.equals("teacher")) {
+            Button btnMeeting = new Button(this);
+            btnMeeting.setText("🎥 START STAFF VIDEO CONFERENCE");
+            btnMeeting.setBackgroundColor(Color.parseColor("#00897B"));
+            btnMeeting.setTextColor(Color.WHITE);
+            btnMeeting.setPadding(20, 30, 20, 30);
+            LinearLayout.LayoutParams meetingParams = new LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+            meetingParams.setMargins(0, 20, 0, 20);
+            btnMeeting.setLayoutParams(meetingParams);
+            
+            mainLayout.addView(btnMeeting, 2); // Adds button right after Search Box
+
+            btnMeeting.setOnClickListener(v -> {
+                try {
+                    String roomName = "MEHF_Staff_Meet_" + (currentUserSchoolId.equals("NA") ? "AdminRoom" : currentUserSchoolId);
+                    org.jitsi.meet.sdk.JitsiMeetConferenceOptions options = new org.jitsi.meet.sdk.JitsiMeetConferenceOptions.Builder()
+                            .setServerURL(new java.net.URL("https://meet.jit.si"))
+                            .setRoom(roomName)
+                            .setAudioMuted(false)
+                            .setVideoMuted(false)
+                            .build();
+                    org.jitsi.meet.sdk.JitsiMeetActivity.launch(this, options);
+                } catch (Exception e) {
+                    Toast.makeText(this, "Meeting Setup Error: " + e.getMessage(), Toast.LENGTH_SHORT).show();
+                }
+            });
+        }
+    }
+
     private void fetchCurrentUserRoleAndLoadContacts() {
         FirebaseUser user = mAuth.getCurrentUser();
         if (user == null) { finish(); return; }
@@ -124,6 +156,7 @@ public class UsersListActivity extends AppCompatActivity {
         if (isAdmin) {
             currentUserRole = "admin";
             currentUserSchoolId = "NA";
+            addStaffMeetingButton();
             listenForRecentChatsAndSort();
             loadContactsFromFirestore();
         } else {
@@ -132,6 +165,7 @@ public class UsersListActivity extends AppCompatActivity {
                     currentUserRole = doc.contains("role") ? doc.getString("role") : "student";
                     currentUserSchoolId = doc.contains("schoolId") ? doc.getString("schoolId") : "NA";
                     if(currentUserRole.equals("school")) currentUserSchoolId = currentUserDocId; 
+                    addStaffMeetingButton();
                     listenForRecentChatsAndSort(); 
                     loadContactsFromFirestore();
                 } else {
