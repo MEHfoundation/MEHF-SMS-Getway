@@ -101,7 +101,7 @@ public class IncomingCallActivity extends AppCompatActivity {
         stopRingtone();
         try {
             JitsiMeetConferenceOptions options = new JitsiMeetConferenceOptions.Builder()
-                    .setServerURL(new URL("https://meet.jit.si"))
+                    .setServerURL(new URL("https://meet.ffmuc.net"))
                     .setRoom(roomName)
                     .setAudioMuted(false)
                     .setVideoMuted(!isVideo)
