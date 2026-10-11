@@ -30,20 +30,11 @@ android {
     }
 }
 
-// Ye block purani WebRTC request ko nayi library par force redirect karega
-configurations.all {
-    resolutionStrategy.eachDependency { details ->
-        if (details.requested.group == 'org.webrtc' && details.requested.name == 'google-webrtc') {
-            details.useTarget 'io.getstream:stream-webrtc-android:1.1.1'
-        }
-    }
-}
-
 dependencies {
     implementation 'androidx.appcompat:appcompat:1.6.1'
     implementation 'com.google.android.material:material:1.11.0'
 
-    // Firebase
+    // Firebase (Purana code bilkul safe hai)
     implementation platform('com.google.firebase:firebase-bom:32.7.0')
     implementation 'com.google.firebase:firebase-auth'
     implementation 'com.google.firebase:firebase-firestore'
@@ -52,6 +43,6 @@ dependencies {
     // OneSignal
     implementation 'com.onesignal:OneSignal:[5.0.0, 5.99.99]'
 
-    // WebRTC
-    implementation 'io.getstream:stream-webrtc-android:1.1.1'
+    // 🔥 NAYA: Jitsi Meet Native SDK (Bina Black Screen aur Expiry ke)
+    implementation ('org.jitsi.react:jitsi-meet-sdk:8.1.2') { transitive = true }
 }
