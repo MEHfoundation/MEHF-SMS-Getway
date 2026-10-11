@@ -1,5 +1,10 @@
 package com.mehf.smsgateway;
 
+import org.jitsi.meet.sdk.BroadcastEvent;
+import androidx.localbroadcastmanager.content.LocalBroadcastManager;
+import android.content.BroadcastReceiver;
+import android.content.Intent;
+import android.content.IntentFilter;
 import android.app.KeyguardManager;
 import android.content.Context;
 import android.graphics.Color;
@@ -37,6 +42,9 @@ import java.util.Map;
 
 public class ChatActivity extends AppCompatActivity {
 
+    private long callStartTime = 0;
+    private boolean isCaller = false;
+    private boolean isVideoCallLog = false;
     private EditText etMessage;
     private Button btnSend, btnAcceptCall, btnDeclineCall;
     private ImageButton btnVoiceCall, btnVideoCall;
@@ -158,6 +166,43 @@ public class ChatActivity extends AppCompatActivity {
         });
 
         listenForIncomingSignals();
+
+        // 🔥 NEW: Call Timer & History Saver (Yahan par add kiya gaya hai)
+        BroadcastReceiver callReceiver = new BroadcastReceiver() {
+            @Override
+            public void onReceive(Context context, Intent intent) {
+                String action = intent.getAction();
+                if (BroadcastEvent.Type.CONFERENCE_JOINED.getAction().equals(action)) {
+                    callStartTime = System.currentTimeMillis(); // Call uthate hi timer shuru
+                } else if (BroadcastEvent.Type.CONFERENCE_TERMINATED.getAction().equals(action)) {
+                    if (isCaller && callStartTime > 0) {
+                        long duration = System.currentTimeMillis() - callStartTime;
+                        long mins = (duration / 1000) / 60;
+                        long secs = (duration / 1000) % 60;
+                        String timeStr = mins > 0 ? mins + " min " + secs + " sec" : secs + " sec";
+                        String msg = (isVideoCallLog ? "📹 Video Call" : "📞 Voice Call") + " (Duration: " + timeStr + ")";
+
+                        // Firestore chat history me duration save karein
+                        Map<String, Object> chatData = new HashMap<>();
+                        chatData.put("senderId", currentUserDocId);
+                        chatData.put("senderName", currentUserName);
+                        chatData.put("receiverId", targetUserId);
+                        chatData.put("message", msg);
+                        chatData.put("status", "read"); 
+                        chatData.put("schoolId", chatSchoolId); 
+                        chatData.put("timestamp", System.currentTimeMillis());
+                        db.collection("chats").add(chatData);
+                    }
+                    callStartTime = 0;
+                    isCaller = false;
+                }
+            }
+        };
+        
+        IntentFilter filter = new IntentFilter();
+        filter.addAction(BroadcastEvent.Type.CONFERENCE_JOINED.getAction());
+        filter.addAction(BroadcastEvent.Type.CONFERENCE_TERMINATED.getAction());
+        LocalBroadcastManager.getInstance(this).registerReceiver(callReceiver, filter);
     }
 
     private void sendMessageToFirebase(String text) {
@@ -277,9 +322,11 @@ public class ChatActivity extends AppCompatActivity {
     }
 
     private void startCall(boolean isVideo) {
+        isCaller = true; // 🔥 Call karne wale ko mark karein
+        isVideoCallLog = isVideo; // 🔥 Video ya Voice call save karne ke liye
+
         String roomName = "MEHF_Call_" + currentUserDocId + "_" + targetUserId;
         
-        // Firebase me call ki request bhejein
         Map<String, Object> callData = new HashMap<>();
         callData.put("callerId", currentUserDocId);
         callData.put("targetId", targetUserId);
@@ -289,7 +336,6 @@ public class ChatActivity extends AppCompatActivity {
         callData.put("timestamp", System.currentTimeMillis());
         db.collection("calls").document(targetUserId).set(callData);
 
-        // Native Jitsi Meeting Shuru karein
         launchJitsiMeet(roomName, isVideo);
     }
 
@@ -298,8 +344,10 @@ public class ChatActivity extends AppCompatActivity {
             JitsiMeetConferenceOptions options = new JitsiMeetConferenceOptions.Builder()
                     .setServerURL(new URL("https://meet.jit.si"))
                     .setRoom(roomName)
-                    .setAudioMuted(!isVideo) 
+                    .setAudioMuted(false) // Voice humesha chalu
                     .setVideoMuted(!isVideo) 
+                    .setFeatureFlag("prejoinpage.enabled", false) // 🔥 Direct WhatsApp jaisi call (No Join Page)
+                    .setFeatureFlag("invite.enabled", true)
                     .build();
             JitsiMeetActivity.launch(this, options);
         } catch (Exception e) {
