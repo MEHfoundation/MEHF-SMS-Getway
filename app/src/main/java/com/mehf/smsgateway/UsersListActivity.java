@@ -23,6 +23,9 @@ import com.google.firebase.auth.FirebaseUser;
 import com.google.firebase.firestore.DocumentSnapshot;
 import com.google.firebase.firestore.FirebaseFirestore;
 
+// 🔥 NEW: ZegoCloud Import
+import com.zegocloud.uikit.prebuilt.call.ZegoUIKitPrebuiltCallService;
+
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -38,6 +41,7 @@ public class UsersListActivity extends AppCompatActivity {
     private String currentUserRole = "";
     private String currentUserSchoolId = "NA";
     private String currentUserDocId = "";
+    private String currentUserName = ""; // Needed for ZegoCloud
     
     private LinearLayout contactsLayout;
     private List<DocumentSnapshot> allUsersCache = new ArrayList<>();
@@ -87,6 +91,7 @@ public class UsersListActivity extends AppCompatActivity {
 
         btnLogout.setOnClickListener(v -> {
             mAuth.signOut();
+            ZegoUIKitPrebuiltCallService.unInit(); // 🔥 ZegoCloud Cleanup
             prefs.edit().putBoolean("is_connect_user", false).apply(); 
             prefs.edit().putBoolean("is_admin_active_session", false).apply();
             Intent intent = new Intent(UsersListActivity.this, MainActivity.class);
@@ -113,9 +118,8 @@ public class UsersListActivity extends AppCompatActivity {
         });
 
         fetchCurrentUserRoleAndLoadContacts();
-
-        // 🔥 CRITICAL FIX: App start hote hi Background Call Service chalu karein
-        startService(new Intent(this, CallBackgroundService.class));
+        
+        // 🔥 CRITICAL FIX: Removed manual CallBackgroundService start. ZegoCloud handles this inherently now.
     }
 
     private void addStaffMeetingButton() {
@@ -135,18 +139,16 @@ public class UsersListActivity extends AppCompatActivity {
             btnMeeting.setOnClickListener(v -> {
                 try {
                     String roomName = "MEHF_Staff_Meet_" + (currentUserSchoolId.equals("NA") ? "AdminRoom" : currentUserSchoolId);
-                    org.jitsi.meet.sdk.JitsiMeetConferenceOptions options = new org.jitsi.meet.sdk.JitsiMeetConferenceOptions.Builder()
-                            .setServerURL(new java.net.URL("https://meet.ffmuc.net"))
-                            .setRoom(roomName)
-                            .setAudioMuted(false)
-                            .setVideoMuted(false)
-                            .setSubject("MEHF Staff Meeting")
-                            .setFeatureFlag("prejoinpage.enabled", false)
-                            .setFeatureFlag("invite.enabled", true)
-                            .setFeatureFlag("welcomepage.enabled", false)
-                            .setFeatureFlag("tile-view.enabled", true)
-                            .build();
-                    org.jitsi.meet.sdk.JitsiMeetActivity.launch(this, options);
+                    
+                    // 🔥 ZegoCloud direct Group Video Call logic
+                    Intent intent = new Intent(this, ChatActivity.class);
+                    // Pass a special flag or target ID so ChatActivity knows to open a ZegoCloud Group Room
+                    // For now, we are passing the roomName as the targetId, which you can handle in ChatActivity if you want direct group joins.
+                    intent.putExtra("targetUserId", "group_" + roomName); 
+                    intent.putExtra("targetUserName", "Staff Meeting");
+                    intent.putExtra("schoolId", currentUserSchoolId);
+                    startActivity(intent);
+                    
                 } catch (Exception e) {
                     Toast.makeText(this, "Meeting Setup Error: " + e.getMessage(), Toast.LENGTH_SHORT).show();
                 }
@@ -164,6 +166,7 @@ public class UsersListActivity extends AppCompatActivity {
         if (isAdmin) {
             currentUserRole = "admin";
             currentUserSchoolId = "NA";
+            currentUserName = "Admin";
             addStaffMeetingButton();
             listenForRecentChatsAndSort();
             loadContactsFromFirestore();
@@ -172,6 +175,7 @@ public class UsersListActivity extends AppCompatActivity {
                 if (doc.exists()) {
                     currentUserRole = doc.contains("role") ? doc.getString("role") : "student";
                     currentUserSchoolId = doc.contains("schoolId") ? doc.getString("schoolId") : "NA";
+                    currentUserName = doc.contains("name") ? doc.getString("name") : currentUserDocId;
                     if(currentUserRole.equals("school")) currentUserSchoolId = currentUserDocId; 
                     addStaffMeetingButton();
                     listenForRecentChatsAndSort(); 
