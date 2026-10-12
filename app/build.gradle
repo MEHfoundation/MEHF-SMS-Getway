@@ -34,7 +34,7 @@ dependencies {
     implementation 'androidx.appcompat:appcompat:1.6.1'
     implementation 'com.google.android.material:material:1.11.0'
 
-    // Firebase (Purana code bilkul safe hai)
+    // Firebase
     implementation platform('com.google.firebase:firebase-bom:32.7.0')
     implementation 'com.google.firebase:firebase-auth'
     implementation 'com.google.firebase:firebase-firestore'
@@ -42,10 +42,7 @@ dependencies {
 
     // OneSignal
     implementation 'com.onesignal:OneSignal:[5.0.0, 5.99.99]'
-    
-    // 🔥 CRITICAL FIX: Jitsi ko hata diya gaya hai.
-    // implementation ('org.jitsi.react:jitsi-meet-sdk:8.6.0') { transitive = true }
 
-    // ✅ NAYA: ZegoCloud Prebuilt Call SDK (For Audio/Video & Lock-screen Calls)
-    implementation 'com.github.ZEGOCLOUD:zego_uikit_prebuilt_call_android:+'
+    // ✅ NAYA: ZegoCloud Prebuilt Call SDK (Stable Version - 3.x series)
+    implementation 'com.github.ZEGOCLOUD:zego_uikit_prebuilt_call_android:3.0.0' 
 }
