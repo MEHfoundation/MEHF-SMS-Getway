@@ -11,8 +11,10 @@ dependencyResolutionManagement {
     repositories {
         google()
         mavenCentral()
-        // 🔥 ZegoCloud और अन्य थर्ड-पार्टी लाइब्रेरीज के लिए JitPack सबसे ज़रूरी है
         maven { url 'https://jitpack.io' }
+        
+        // 🔥 CRITICAL FIX: ZegoCloud के अपने सर्वर की रिपॉजिटरी (इन्हें जोड़ना अनिवार्य है)
+        maven { url "https://maven.zego.im/maven" }
     }
 }
 
