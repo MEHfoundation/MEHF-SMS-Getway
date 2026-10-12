@@ -1,17 +1,12 @@
 package com.mehf.smsgateway;
 
-import org.jitsi.meet.sdk.BroadcastEvent;
-import androidx.localbroadcastmanager.content.LocalBroadcastManager;
+import android.app.KeyguardManager;
 import android.content.BroadcastReceiver;
+import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
-import android.app.KeyguardManager;
-import android.content.Context;
 import android.graphics.Color;
 import android.graphics.drawable.GradientDrawable;
-import android.media.MediaPlayer;
-import android.media.RingtoneManager;
-import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.view.Gravity;
@@ -19,22 +14,24 @@ import android.view.View;
 import android.view.WindowManager;
 import android.widget.Button;
 import android.widget.EditText;
-import android.widget.ImageButton;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
-import android.widget.Toast;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.localbroadcastmanager.content.LocalBroadcastManager;
 
+import com.google.firebase.auth.FirebaseAuth;
+import com.google.firebase.auth.FirebaseUser;
 import com.google.firebase.firestore.DocumentChange;
 import com.google.firebase.firestore.FirebaseFirestore;
 import com.google.firebase.firestore.Query;
 
-import org.jitsi.meet.sdk.JitsiMeetActivity;
-import org.jitsi.meet.sdk.JitsiMeetConferenceOptions;
+// 🔥 NEW: ZegoCloud Imports
+import com.zegocloud.uikit.prebuilt.call.invite.widget.ZegoSendCallInvitationButton;
+import com.zegocloud.uikit.service.defines.ZegoUIKitUser;
 
-import java.net.URL;
 import java.text.SimpleDateFormat;
+import java.util.Collections;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.Locale;
@@ -42,29 +39,25 @@ import java.util.Map;
 
 public class ChatActivity extends AppCompatActivity {
 
-    private long callStartTime = 0;
-    private boolean isCaller = false;
-    private boolean isVideoCallLog = false;
+    // Removed Jitsi, Ringtone, and manual signaling variables as ZegoCloud handles them.
     private EditText etMessage;
-    private Button btnSend, btnAcceptCall, btnDeclineCall;
-    private ImageButton btnVoiceCall, btnVideoCall;
-    private LinearLayout chatListLayout, incomingCallLayout;
+    private Button btnSend;
+    private ZegoSendCallInvitationButton btnVoiceCall, btnVideoCall; // 🔥 Updated to Zego Buttons
+    private LinearLayout chatListLayout;
     private ScrollView chatScrollView;
-    private TextView tvChatTitle, tvIncomingCallTitle;
+    private TextView tvChatTitle;
     private FirebaseFirestore db;
     
-    private String incomingCallerId = "";
-    private String incomingRoomName = "";
-    private boolean isIncomingVideo = false;
-    private MediaPlayer ringtonePlayer; 
-    
-    private boolean isCallActive = false; 
     private boolean isActivityVisible = false; 
 
     private String currentUserDocId = ""; 
     private String currentUserName = "";
     private String targetUserId = ""; 
     private String chatSchoolId = "NA"; 
+
+    // Used for logging call history
+    private long callStartTime = 0;
+    private boolean isCaller = false;
 
     @Override
     protected void onResume() {
@@ -103,16 +96,13 @@ public class ChatActivity extends AppCompatActivity {
         btnSend = findViewById(R.id.btnSend);
         chatListLayout = findViewById(R.id.chatListLayout);
         chatScrollView = findViewById(R.id.chatScrollView);
+        tvChatTitle = findViewById(R.id.tvChatTitle);
+        
+        // 🔥 Link ZegoCloud specific buttons
         btnVoiceCall = findViewById(R.id.btnVoiceCall);
         btnVideoCall = findViewById(R.id.btnVideoCall);
-        
-        incomingCallLayout = findViewById(R.id.incomingCallLayout);
-        tvIncomingCallTitle = findViewById(R.id.tvIncomingCallTitle);
-        btnAcceptCall = findViewById(R.id.btnAcceptCall);
-        btnDeclineCall = findViewById(R.id.btnDeclineCall);
-        tvChatTitle = findViewById(R.id.tvChatTitle);
 
-        com.google.firebase.auth.FirebaseUser user = com.google.firebase.auth.FirebaseAuth.getInstance().getCurrentUser();
+        FirebaseUser user = FirebaseAuth.getInstance().getCurrentUser();
         if (user != null && user.getEmail() != null) {
             currentUserDocId = user.getEmail().split("@")[0];
             currentUserName = currentUserDocId;
@@ -148,41 +138,44 @@ public class ChatActivity extends AppCompatActivity {
         } else {
             btnVideoCall.setVisibility(View.VISIBLE);
             btnVoiceCall.setVisibility(View.VISIBLE);
-            btnVideoCall.setOnClickListener(v -> startCall(true));
-            btnVoiceCall.setOnClickListener(v -> startCall(false));
+            
+            // 🔥 NAYA: ZegoCloud Invitation Configuration
+            // You must set the resourceID identical to the one you configured in the ZegoCloud Admin Console for offline calls.
+            
+            // Setup Voice Call Button
+            btnVoiceCall.setIsVideoCall(false);
+            btnVoiceCall.setResourceID("zego_uikit_call"); 
+            btnVoiceCall.setInvitees(Collections.singletonList(new ZegoUIKitUser(targetUserId, targetName)));
+            btnVoiceCall.setOnClickListener(v -> {
+                 isCaller = true;
+                 callStartTime = System.currentTimeMillis();
+            });
+
+            // Setup Video Call Button
+            btnVideoCall.setIsVideoCall(true);
+            btnVideoCall.setResourceID("zego_uikit_call");
+            btnVideoCall.setInvitees(Collections.singletonList(new ZegoUIKitUser(targetUserId, targetName)));
+            btnVideoCall.setOnClickListener(v -> {
+                 isCaller = true;
+                 callStartTime = System.currentTimeMillis();
+            });
         }
-        
-        btnAcceptCall.setOnClickListener(v -> { 
-            stopRingtone(); 
-            incomingCallLayout.setVisibility(View.GONE);
-            db.collection("calls").document(currentUserDocId).update("type", "in-progress");
-            launchJitsiMeet(incomingRoomName, isIncomingVideo);
-        });
-        
-        btnDeclineCall.setOnClickListener(v -> { 
-            stopRingtone();
-            incomingCallLayout.setVisibility(View.GONE);
-            db.collection("calls").document(currentUserDocId).delete();
-        });
 
-        listenForIncomingSignals();
-
-        // 🔥 NEW: Call Timer & History Saver (Yahan par add kiya gaya hai)
-        BroadcastReceiver callReceiver = new BroadcastReceiver() {
+        // 🔥 NAYA: Call History Logging using ZegoCloud Broadcasts
+        BroadcastReceiver callEndReceiver = new BroadcastReceiver() {
             @Override
             public void onReceive(Context context, Intent intent) {
-                String action = intent.getAction();
-                if (BroadcastEvent.Type.CONFERENCE_JOINED.getAction().equals(action)) {
-                    callStartTime = System.currentTimeMillis(); // Call uthate hi timer shuru
-                } else if (BroadcastEvent.Type.CONFERENCE_TERMINATED.getAction().equals(action)) {
+                // ZegoCloud fires this action when a call ends
+                if ("com.zegocloud.uikit.call.ended".equals(intent.getAction())) {
                     if (isCaller && callStartTime > 0) {
                         long duration = System.currentTimeMillis() - callStartTime;
                         long mins = (duration / 1000) / 60;
                         long secs = (duration / 1000) % 60;
                         String timeStr = mins > 0 ? mins + " min " + secs + " sec" : secs + " sec";
-                        String msg = (isVideoCallLog ? "📹 Video Call" : "📞 Voice Call") + " (Duration: " + timeStr + ")";
+                        // Determine call type based on intent extras if available, default to generic "Call" if not
+                        boolean isVideo = intent.getBooleanExtra("isVideoCall", false);
+                        String msg = (isVideo ? "📹 Video Call" : "📞 Voice Call") + " (Duration: " + timeStr + ")";
 
-                        // Firestore chat history me duration save karein
                         Map<String, Object> chatData = new HashMap<>();
                         chatData.put("senderId", currentUserDocId);
                         chatData.put("senderName", currentUserName);
@@ -199,10 +192,10 @@ public class ChatActivity extends AppCompatActivity {
             }
         };
         
+        // Register receiver for ZegoCloud end call event
         IntentFilter filter = new IntentFilter();
-        filter.addAction(BroadcastEvent.Type.CONFERENCE_JOINED.getAction());
-        filter.addAction(BroadcastEvent.Type.CONFERENCE_TERMINATED.getAction());
-        LocalBroadcastManager.getInstance(this).registerReceiver(callReceiver, filter);
+        filter.addAction("com.zegocloud.uikit.call.ended");
+        LocalBroadcastManager.getInstance(this).registerReceiver(callEndReceiver, filter);
     }
 
     private void sendMessageToFirebase(String text) {
@@ -319,104 +312,5 @@ public class ChatActivity extends AppCompatActivity {
                 tvTick.setTextColor(Color.GRAY);
             }
         }
-    }
-
-    private void startCall(boolean isVideo) {
-        isCaller = true; // 🔥 Call karne wale ko mark karein
-        isVideoCallLog = isVideo; // 🔥 Video ya Voice call save karne ke liye
-
-        String roomName = "MEHF_Call_" + currentUserDocId + "_" + targetUserId;
-        
-        Map<String, Object> callData = new HashMap<>();
-        callData.put("callerId", currentUserDocId);
-        callData.put("targetId", targetUserId);
-        callData.put("type", "jitsi_offer");
-        callData.put("roomName", roomName);
-        callData.put("isVideo", isVideo);
-        callData.put("timestamp", System.currentTimeMillis());
-        db.collection("calls").document(targetUserId).set(callData);
-
-        launchJitsiMeet(roomName, isVideo);
-    }
-
-    private void launchJitsiMeet(String roomName, boolean isVideo) {
-        try {
-            org.jitsi.meet.sdk.JitsiMeetConferenceOptions options = new org.jitsi.meet.sdk.JitsiMeetConferenceOptions.Builder()
-                    .setServerURL(new java.net.URL("https://meet.ffmuc.net"))
-                    .setRoom(roomName)
-                    .setAudioMuted(false)
-                    .setVideoMuted(!isVideo)
-                    // 🔥 CRITICAL FIX: Bina kisi login aur pre-join ke direct entry ke liye
-                    .setSubject("MEHF Secure Call")
-                    .setFeatureFlag("prejoinpage.enabled", false)
-                    .setFeatureFlag("invite.enabled", true)
-                    .setFeatureFlag("welcomepage.enabled", false)
-                    .setFeatureFlag("tile-view.enabled", true)
-                    .build();
-            org.jitsi.meet.sdk.JitsiMeetActivity.launch(this, options);
-        } catch (Exception e) {
-            Toast.makeText(this, "Call Start Error: " + e.getMessage(), Toast.LENGTH_SHORT).show();
-        }
-    }
-
-    private void listenForIncomingSignals() {
-        db.collection("calls").document(currentUserDocId)
-          .addSnapshotListener((snapshot, e) -> {
-              if (isCallActive) return;
-
-              if (snapshot == null || !snapshot.exists()) {
-                  runOnUiThread(() -> {
-                      incomingCallLayout.setVisibility(View.GONE);
-                      stopRingtone();
-                  });
-                  return;
-              }
-              
-              String type = snapshot.getString("type");
-              
-              if ("jitsi_offer".equals(type)) {
-                  incomingCallerId = snapshot.getString("callerId");
-                  incomingRoomName = snapshot.getString("roomName");
-                  isIncomingVideo = snapshot.getBoolean("isVideo") != null ? snapshot.getBoolean("isVideo") : true;
-                  
-                  if (!isCallActive) {
-                      incomingCallLayout.setVisibility(View.VISIBLE);
-                      tvIncomingCallTitle.setText((isIncomingVideo ? "📹 Video Call" : "📞 Voice Call") + "\nFrom: " + incomingCallerId);
-                      startRingtone();
-                  }
-              }
-          });
-    }
-
-    private void startRingtone() {
-        try {
-            if (isCallActive) return; 
-            if (ringtonePlayer != null && ringtonePlayer.isPlaying()) return; 
-            
-            Uri ringtoneUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE);
-            ringtonePlayer = MediaPlayer.create(this, ringtoneUri);
-            ringtonePlayer.setLooping(true); 
-            ringtonePlayer.start();
-        } catch (Exception e) {}
-    }
-
-    private void stopRingtone() {
-        if (ringtonePlayer != null && ringtonePlayer.isPlaying()) {
-            ringtonePlayer.stop();
-            ringtonePlayer.release();
-            ringtonePlayer = null;
-        }
-    }
-
-    @Override
-    protected void onStop() {
-        super.onStop();
-        if (!isCallActive) stopRingtone();
-    }
-
-    @Override
-    protected void onDestroy() {
-        super.onDestroy();
-        stopRingtone();
     }
 }
