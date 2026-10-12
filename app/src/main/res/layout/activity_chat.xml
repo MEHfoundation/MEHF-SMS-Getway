@@ -22,14 +22,18 @@
             android:textColor="#FFF"
             android:textSize="18sp"
             android:textStyle="bold" />
-        <ImageButton
+        
+        <!-- 🔥 ZegoCloud Voice Call Invitation Button -->
+        <com.zegocloud.uikit.prebuilt.call.invite.widget.ZegoSendCallInvitationButton
             android:id="@+id/btnVoiceCall"
             android:layout_width="40dp"
             android:layout_height="40dp"
             android:background="?attr/selectableItemBackground"
             android:src="@android:drawable/ic_btn_speak_now"
             android:tint="#FFF"/>
-        <ImageButton
+        
+        <!-- 🔥 ZegoCloud Video Call Invitation Button -->
+        <com.zegocloud.uikit.prebuilt.call.invite.widget.ZegoSendCallInvitationButton
             android:id="@+id/btnVideoCall"
             android:layout_width="40dp"
             android:layout_height="40dp"
@@ -81,99 +85,4 @@
             android:textColor="#FFF" />
     </LinearLayout>
 
-    <!-- Incoming Call Overlay -->
-    <LinearLayout
-        android:id="@+id/incomingCallLayout"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_alignParentTop="true"
-        android:layout_marginTop="80dp"
-        android:layout_marginHorizontal="20dp"
-        android:background="#FFF"
-        android:elevation="15dp"
-        android:orientation="vertical"
-        android:padding="20dp"
-        android:visibility="gone">
-        <TextView
-            android:id="@+id/tvIncomingCallTitle"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="Incoming Call..."
-            android:textSize="18sp"
-            android:textColor="#000"
-            android:textStyle="bold"
-            android:gravity="center"
-            android:layout_marginBottom="20dp"/>
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal">
-            <Button
-                android:id="@+id/btnDeclineCall"
-                android:layout_width="0dp"
-                android:layout_weight="1"
-                android:layout_height="wrap_content"
-                android:text="DECLINE ❌"
-                android:backgroundTint="#F44336"
-                android:textColor="#FFF"
-                android:layout_marginEnd="10dp"/>
-            <Button
-                android:id="@+id/btnAcceptCall"
-                android:layout_width="0dp"
-                android:layout_weight="1"
-                android:layout_height="wrap_content"
-                android:text="ACCEPT 📞"
-                android:backgroundTint="#4CAF50"
-                android:textColor="#FFF" />
-        </LinearLayout>
-    </LinearLayout>
-
-    <!-- Video Call Container -->
-    <RelativeLayout
-        android:id="@+id/videoCallContainer"
-        android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:background="#000"
-        android:elevation="20dp"
-        android:visibility="gone">
-        
-        <org.webrtc.SurfaceViewRenderer
-            android:id="@+id/remoteVideoView"
-            android:layout_width="match_parent"
-            android:layout_height="match_parent" />
-            
-        <org.webrtc.SurfaceViewRenderer
-            android:id="@+id/localVideoView"
-            android:layout_width="120dp"
-            android:layout_height="160dp"
-            android:layout_alignParentBottom="true"
-            android:layout_alignParentRight="true"
-            android:layout_margin="20dp" />
-
-        <!-- 🔥 CALL TIMER -->
-        <Chronometer
-            android:id="@+id/callTimer"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_alignParentTop="true"
-            android:layout_centerHorizontal="true"
-            android:layout_marginTop="30dp"
-            android:textColor="#FFF"
-            android:textSize="18sp"
-            android:textStyle="bold"
-            android:background="#88000000"
-            android:padding="10dp"
-            android:visibility="gone"/>
-
-        <Button
-            android:id="@+id/btnEndCall"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_alignParentBottom="true"
-            android:layout_centerHorizontal="true"
-            android:layout_marginBottom="30dp"
-            android:text="END CALL 🔴"
-            android:backgroundTint="#F44336"
-            android:textColor="#FFF" />
-    </RelativeLayout>
 </RelativeLayout>
