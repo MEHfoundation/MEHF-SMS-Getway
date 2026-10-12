@@ -32,7 +32,7 @@ public class SmsBackgroundService extends Service implements TextToSpeech.OnInit
         
         Notification notification = new NotificationCompat.Builder(this, "MEHF_SERVICE")
                 .setContentTitle("MEHF System Active")
-                .setContentText("Listening for messages & calls...")
+                .setContentText("Listening for messages...")
                 .setSmallIcon(R.drawable.logo)
                 .build();
         
@@ -42,7 +42,7 @@ public class SmsBackgroundService extends Service implements TextToSpeech.OnInit
             startForeground(1, notification);
         }
         
-        listenForNewChatsAndCalls();
+        listenForNewChats(); // 🔥 Renamed method: Removed manual call listeners
     }
 
     @Override
@@ -66,7 +66,8 @@ public class SmsBackgroundService extends Service implements TextToSpeech.OnInit
         }
     }
 
-    private void listenForNewChatsAndCalls() {
+    // 🔥 Removed the manual "calls" collection listener. ZegoCloud handles all incoming calls now.
+    private void listenForNewChats() {
         FirebaseUser user = FirebaseAuth.getInstance().getCurrentUser();
         if (user == null) return;
         
@@ -90,40 +91,15 @@ public class SmsBackgroundService extends Service implements TextToSpeech.OnInit
                             if (System.currentTimeMillis() - msgTime < 15000) {
                                 String msg = dc.getDocument().getString("message");
                                 String sender = dc.getDocument().getString("senderName");
-                                showPopUpNotification(sender, msg);
-                                speak(sender + " का मैसेज है: " + msg);
+                                
+                                // Do not announce if the message is an automated call log from ZegoCloud
+                                if (msg != null && !msg.contains("(Duration:")) {
+                                    showPopUpNotification(sender, msg);
+                                    speak(sender + " का मैसेज है: " + msg);
+                                }
                             }
                         }
                     }
-                }
-            });
-
-         FirebaseFirestore.getInstance().collection("calls")
-            .document(myId)
-            .addSnapshotListener((snap, e) -> {
-                if (e != null || snap == null || !snap.exists()) return;
-                if ("offer".equals(snap.getString("type"))) {
-                    String caller = snap.getString("callerId");
-                    
-                    Intent intent = new Intent(this, ChatActivity.class);
-                    intent.putExtra("targetUserId", caller);
-                    intent.putExtra("targetUserName", caller);
-                    intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
-                    
-                    PendingIntent pi = PendingIntent.getActivity(this, 1, intent, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
-                    
-                    NotificationCompat.Builder builder = new NotificationCompat.Builder(this, "MEHF_CALL_CHANNEL")
-                            .setContentTitle("📞 Incoming Call")
-                            .setContentText(caller + " is calling...")
-                            .setSmallIcon(R.drawable.logo)
-                            .setPriority(NotificationCompat.PRIORITY_MAX)
-                            .setCategory(NotificationCompat.CATEGORY_CALL)
-                            .setFullScreenIntent(pi, true) 
-                            .setAutoCancel(true);
-                            
-                    NotificationManager nm = (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
-                    nm.notify(100, builder.build());
-                    speak("इनकमिंग कॉल आ रही है, " + caller + " से");
                 }
             });
     }
@@ -151,17 +127,18 @@ public class SmsBackgroundService extends Service implements TextToSpeech.OnInit
             if (nm != null) {
                 NotificationChannel msgChannel = new NotificationChannel("MEHF_SERVICE", "MEHF Messages", NotificationManager.IMPORTANCE_HIGH);
                 nm.createNotificationChannel(msgChannel);
-                
-                NotificationChannel callChannel = new NotificationChannel("MEHF_CALL_CHANNEL", "Incoming Calls", NotificationManager.IMPORTANCE_HIGH);
-                callChannel.setSound(null, null); 
-                callChannel.enableVibration(true);
-                nm.createNotificationChannel(callChannel);
+                // Removed custom call channel creation as Zego handles it natively
             }
         }
     }
 
     @Override public IBinder onBind(Intent intent) { return null; }
-    @Override public void onDestroy() { if (tts != null) tts.shutdown(); super.onDestroy(); }
+    
+    @Override 
+    public void onDestroy() { 
+        if (tts != null) tts.shutdown(); 
+        super.onDestroy(); 
+    }
     
     @Override
     public void onTaskRemoved(Intent rootIntent) {
