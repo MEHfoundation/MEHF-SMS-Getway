@@ -23,12 +23,13 @@ android {
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
     }
+    
     compileOptions {
         // Java version 17
         sourceCompatibility JavaVersion.VERSION_17
         targetCompatibility JavaVersion.VERSION_17
     }
-}
+} // 🔥 ध्यान दें: यह ब्रैकेट (}) मिसिंग था!
 
 dependencies {
     implementation 'androidx.appcompat:appcompat:1.6.1'
@@ -42,4 +43,7 @@ dependencies {
 
     // OneSignal
     implementation 'com.onesignal:OneSignal:[5.0.0, 5.99.99]'
+
+    // ✅ ZegoCloud (हमने वापस + लगा दिया है ताकि एरर न आए)
     implementation 'com.github.ZEGOCLOUD:zego_uikit_prebuilt_call_android:+'
+}
