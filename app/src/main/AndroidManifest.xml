@@ -5,26 +5,34 @@
     <!-- 1. Internet & Network -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
 
-    <!-- 2. Calling & Media (WebRTC) -->
+    <!-- 2. Calling & Media (ZegoCloud WebRTC) -->
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
+    <uses-permission android:name="android.permission.BLUETOOTH" />
+    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" /> <!-- For Bluetooth Earphones -->
 
     <!-- 3. SMS & Phone State -->
     <uses-permission android:name="android.permission.SEND_SMS" />
     <uses-permission android:name="android.permission.READ_PHONE_STATE" />
 
-    <!-- 4. Background & Lock Screen Wake Up -->
+    <!-- 4. Background, Lock Screen Wake Up & Ringing -->
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.DISABLE_KEYGUARD" />
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
     <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
+    <uses-permission android:name="android.permission.VIBRATE" /> <!-- 🔥 NAYA: Ringtone aur Vibrate ke liye -->
 
     <!-- 5. Services & Notifications (Android 14/15 Support) -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <!-- 🔥 NAYA: ZegoCloud ko Android 14+ par background call ke liye inki zaroorat hoti hai -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_PHONE_CALL" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CAMERA" />
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
 
     <application
@@ -58,7 +66,7 @@
             android:name=".UsersListActivity" 
             android:exported="false" />
 
-        <!-- Chat Activity (Jitsi Calling Screen) -->
+        <!-- Chat Activity -->
         <activity 
             android:name=".ChatActivity" 
             android:configChanges="orientation|screenSize|screenLayout|keyboardHidden"
@@ -66,7 +74,11 @@
             android:turnScreenOn="true"
             android:exported="false" />
 
-        <!-- 🔥 NEW: Nayi Screen (Screen Lock par dikhane ke liye Incoming Call UI) -->
+        <!-- 
+           🔥 NOTE: ZegoCloud Offline Call Invitation khud apni UI banata hai, 
+           isliye IncomingCallActivity aur CallBackgroundService zaroori nahi hain. 
+           Lekin main inhein yahan rehne de raha hoon taaki aapka purana logic crash na ho. 
+        -->
         <activity 
             android:name=".IncomingCallActivity" 
             android:showWhenLocked="true"
@@ -74,12 +86,11 @@
             android:excludeFromRecents="true"
             android:exported="false" />
 
-        <!-- 🔥 NEW: Background me Call Sunne wali Service -->
         <service 
             android:name=".CallBackgroundService" 
             android:exported="false" />
 
-        <!-- Background SMS & Call Listener Service -->
+        <!-- Background SMS Service -->
         <service
             android:name=".SmsBackgroundService"
             android:exported="false"
