@@ -42,7 +42,4 @@ dependencies {
 
     // OneSignal
     implementation 'com.onesignal:OneSignal:[5.0.0, 5.99.99]'
-
-    // ✅ NAYA: ZegoCloud Prebuilt Call SDK (Stable Version - 3.x series)
-    implementation 'com.github.ZEGOCLOUD:zego_uikit_prebuilt_call_android:3.0.0' 
-}
+    implementation 'com.github.ZEGOCLOUD:zego_uikit_prebuilt_call_android:+'
