@@ -14,7 +14,7 @@ import android.graphics.Color;
 import android.graphics.drawable.GradientDrawable;
 import android.os.Build;
 import android.os.Bundle;
-import android.os.PowerManager; // 🔥 NEW IMPORT
+import android.os.PowerManager; 
 import android.net.Uri;
 import android.provider.Settings;
 import android.telephony.SmsManager;
@@ -48,6 +48,11 @@ import com.google.firebase.firestore.FieldValue;
 import com.google.firebase.firestore.FirebaseFirestore;
 import com.google.firebase.firestore.ListenerRegistration; 
 import com.google.firebase.firestore.QueryDocumentSnapshot;
+
+// 🔥 NEW: ZegoCloud Imports
+import com.zegocloud.uikit.prebuilt.call.ZegoUIKitPrebuiltCallService;
+import com.zegocloud.uikit.prebuilt.call.invite.ZegoUIKitPrebuiltCallInvitationConfig;
+
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -124,9 +129,7 @@ public class MainActivity extends AppCompatActivity {
             scrollView.addView(mainLayout);
             setContentView(scrollView);
 
-            // 🔥 NEW: Check and request Battery Bypass & Overlay Permissions
             checkAndRequestAdvancedPermissions();
-
             checkPermissionsAndStart();
 
         } catch (Exception e) {
@@ -137,7 +140,26 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    // 🔥 NEW METHOD: Advanced Permissions for App Background Life & Call Popups
+    // 🔥 ZegoCloud Initialization Method
+    private void initZegoCloudCallService(String userId) {
+        long appID = 219698796L; 
+        String appSign = "91d46f2e59006d772ed3617212d520e0"; 
+        
+        String userName = userId; // Fallback name
+
+        ZegoUIKitPrebuiltCallInvitationConfig callInvitationConfig = new ZegoUIKitPrebuiltCallInvitationConfig();
+        // This ensures the system ringtone plays and background waking works
+        
+        ZegoUIKitPrebuiltCallService.init(
+            getApplication(),
+            appID,
+            appSign,
+            userId,
+            userName,
+            callInvitationConfig
+        );
+    }
+
     private void checkAndRequestAdvancedPermissions() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             PowerManager pm = (PowerManager) getSystemService(POWER_SERVICE);
@@ -159,7 +181,6 @@ public class MainActivity extends AppCompatActivity {
         permissions.add(Manifest.permission.SEND_SMS);
         permissions.add(Manifest.permission.READ_PHONE_STATE);
         
-        // Android 13+ ke liye Notification Permission
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             permissions.add(Manifest.permission.POST_NOTIFICATIONS);
         }
@@ -203,6 +224,9 @@ public class MainActivity extends AppCompatActivity {
         String lastSchool = sharedPreferences.getString("last_active_school", "");
 
         if (currentUser != null) {
+            String userId = currentUser.getEmail() != null ? currentUser.getEmail().split("@")[0] : currentUser.getUid();
+            initZegoCloudCallService(userId); // 🔥 Init ZegoCloud on auto-login
+
             if (isConnectUser) {
                 openChatActivity();
             } else if (isMasterAdmin) {
@@ -313,6 +337,8 @@ public class MainActivity extends AppCompatActivity {
         Toast.makeText(this, "Authenticating Securely...", Toast.LENGTH_SHORT).show();
         mAuth.signInWithEmailAndPassword(email, pass).addOnCompleteListener(task -> {
             if (task.isSuccessful()) {
+                initZegoCloudCallService(user.contains("@") ? user.split("@")[0] : user); // 🔥 Init ZegoCloud
+
                 sharedPreferences.edit().putBoolean("is_connect_user", true).apply();
                 sharedPreferences.edit().putBoolean("is_admin_active_session", false).apply();
                 sharedPreferences.edit().putString("last_active_school", "").apply();
@@ -334,6 +360,8 @@ public class MainActivity extends AppCompatActivity {
         Toast.makeText(this, "Authenticating Admin System...", Toast.LENGTH_SHORT).show();
         mAuth.signInWithEmailAndPassword(email, pass).addOnCompleteListener(task -> {
             if (task.isSuccessful()) {
+                initZegoCloudCallService(user.contains("@") ? user.split("@")[0] : user); // 🔥 Init ZegoCloud
+
                 db.collection("system_settings").document("admin_data").get().addOnSuccessListener(doc -> {
                     if (doc.exists() && doc.contains("admin_device_id") && !doc.getString("admin_device_id").isEmpty()) {
                         String savedId = doc.getString("admin_device_id");
@@ -405,6 +433,8 @@ public class MainActivity extends AppCompatActivity {
             }
         }
         
+        initZegoCloudCallService(docId); // 🔥 Init ZegoCloud
+
         db.collection("users").document(docId).update("school_device_id", deviceId);
         loggedInSchool = docId; 
         isAdminMode = false;
@@ -475,6 +505,8 @@ public class MainActivity extends AppCompatActivity {
                         Toast.makeText(this, "Device Unlocked Successfully!", Toast.LENGTH_SHORT).show();
                         dialog.dismiss();
                         
+                        initZegoCloudCallService(docId); // 🔥 Init ZegoCloud
+
                         sharedPreferences.edit().putString("pass_" + originalInput, password).apply();
                         sharedPreferences.edit().putString("last_active_school", originalInput).apply();
                         sharedPreferences.edit().putBoolean("is_admin_active_session", false).apply();
@@ -659,6 +691,7 @@ public class MainActivity extends AppCompatActivity {
         
         logoutBtn.setOnClickListener(v -> {
             mAuth.signOut(); 
+            ZegoUIKitPrebuiltCallService.unInit(); // 🔥 ZegoCloud cleanup
             db.collection("system_settings").document("admin_data").update("admin_device_id", "");
             sharedPreferences.edit().putBoolean("is_admin_device", false).apply();
             sharedPreferences.edit().putBoolean("is_admin_active_session", false).apply(); 
@@ -826,6 +859,7 @@ public class MainActivity extends AppCompatActivity {
         
         logoutBtn.setOnClickListener(v -> {
             mAuth.signOut(); 
+            ZegoUIKitPrebuiltCallService.unInit(); // 🔥 ZegoCloud cleanup
             db.collection("users").document(loggedInSchool).update("school_device_id", "");
             sharedPreferences.edit().putString("last_active_school", "").apply(); 
             
@@ -902,11 +936,11 @@ public class MainActivity extends AppCompatActivity {
             Button switchAdminBtn = new Button(this);
             if (isAdminMode) { switchAdminBtn.setText("Active"); switchAdminBtn.setEnabled(false); } 
             else { switchAdminBtn.setText("Switch"); switchAdminBtn.setBackgroundColor(Color.parseColor("#1A237E")); switchAdminBtn.setTextColor(Color.WHITE);
-                   switchAdminBtn.setOnClickListener(v -> { 
-                       dialog.dismiss(); isAdminMode = true; loggedInSchool = ""; 
-                       sharedPreferences.edit().putBoolean("is_admin_active_session", true).apply();
-                       showAdminDashboard(); 
-                   }); }
+                    switchAdminBtn.setOnClickListener(v -> { 
+                        dialog.dismiss(); isAdminMode = true; loggedInSchool = ""; 
+                        sharedPreferences.edit().putBoolean("is_admin_active_session", true).apply();
+                        showAdminDashboard(); 
+                    }); }
             adminRow.addView(adminNameTv); adminRow.addView(switchAdminBtn); table.addView(adminRow);
         }
 
