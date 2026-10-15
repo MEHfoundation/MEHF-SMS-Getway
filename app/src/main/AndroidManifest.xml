@@ -1,109 +1,42 @@
-<?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:tools="http://schemas.android.com/tools">
+<!-- Network & WebRTC Calling Permissions -->
+<uses-permission android:name="android.permission.INTERNET" />
+<uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+<uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+<uses-permission android:name="android.permission.CAMERA" />
+<uses-permission android:name="android.permission.RECORD_AUDIO" />
+<uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
 
-    <!-- 1. Internet & Network -->
-    <uses-permission android:name="android.permission.INTERNET" />
-    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
-    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+<!-- Keep Call & Ring Active When Screen is Locked -->
+<uses-permission android:name="android.permission.WAKE_LOCK" />
+<uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+<uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+<uses-permission android:name="android.permission.VIBRATE" />
 
-    <!-- 2. Calling & Media (ZegoCloud WebRTC) -->
-    <uses-permission android:name="android.permission.CAMERA" />
-    <uses-permission android:name="android.permission.RECORD_AUDIO" />
-    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
-    <uses-permission android:name="android.permission.BLUETOOTH" />
-    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" /> <!-- For Bluetooth Earphones -->
+<!-- Direct School SIM SMS Gateway Permission -->
+<uses-permission android:name="android.permission.SEND_SMS" />
 
-    <!-- 3. SMS & Phone State -->
-    <uses-permission android:name="android.permission.SEND_SMS" />
-    <uses-permission android:name="android.permission.READ_PHONE_STATE" />
+<uses-feature android:name="android.hardware.camera" android:required="false" />
+<uses-feature android:name="android.hardware.camera.autofocus" android:required="false" />
+<uses-feature android:name="android.hardware.microphone" android:required="false" />
+<uses-feature android:name="android.hardware.telephony" android:required="false" />
 
-    <!-- 4. Background, Lock Screen Wake Up & Ringing -->
-    <uses-permission android:name="android.permission.WAKE_LOCK" />
-    <uses-permission android:name="android.permission.DISABLE_KEYGUARD" />
-    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
-    <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
-    <uses-permission android:name="android.permission.VIBRATE" /> <!-- 🔥 NAYA: Ringtone aur Vibrate ke liye -->
+<application
+    android:allowBackup="true"
+    android:label="MEHF Smart Hub"
+    android:usesCleartextTraffic="true"
+    android:hardwareAccelerated="true"
+    android:theme="@android:style/Theme.DeviceDefault.NoActionBar">
 
-    <!-- 5. Services & Notifications (Android 14/15 Support) -->
-    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
-    <!-- 🔥 NAYA: ZegoCloud ko Android 14+ par background call ke liye inki zaroorat hoti hai -->
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_PHONE_CALL" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CAMERA" />
-    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
-
-    <application
-        android:allowBackup="true"
-        android:icon="@drawable/logo"
-        android:label="MEHF Communication"
-        android:theme="@style/Theme.AppCompat.Light.NoActionBar"
-        tools:replace="android:label">
-        
-        <!-- बैकग्राउंड में ऐप बंद होने पर नोटिफिकेशन की सर्विस -->
-        <service
-            android:name=".MyFirebaseMessagingService"
-            android:exported="true">
-            <intent-filter>
-                <action android:name="com.google.firebase.MESSAGING_EVENT" />
-            </intent-filter>
-        </service>
-
-        <!-- Main Activity (Login Page) -->
-        <activity
-            android:name=".MainActivity"
-            android:exported="true">
-            <intent-filter>
-                <action android:name="android.intent.action.MAIN" />
-                <category android:name="android.intent.category.LAUNCHER" />
-            </intent-filter>
-        </activity>
-
-        <!-- Users List Activity (Chat Hub) -->
-        <activity 
-            android:name=".UsersListActivity" 
-            android:exported="false" />
-
-        <!-- Chat Activity -->
-        <activity 
-            android:name=".ChatActivity" 
-            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden"
-            android:showWhenLocked="true"
-            android:turnScreenOn="true"
-            android:exported="false" />
-
-        <!-- 
-           🔥 NOTE: ZegoCloud Offline Call Invitation khud apni UI banata hai, 
-           isliye IncomingCallActivity aur CallBackgroundService zaroori nahi hain. 
-           Lekin main inhein yahan rehne de raha hoon taaki aapka purana logic crash na ho. 
-        -->
-        <activity 
-            android:name=".IncomingCallActivity" 
-            android:showWhenLocked="true"
-            android:turnScreenOn="true"
-            android:excludeFromRecents="true"
-            android:exported="false" />
-
-        <service 
-            android:name=".CallBackgroundService" 
-            android:exported="false" />
-
-        <!-- Background SMS Service -->
-        <service
-            android:name=".SmsBackgroundService"
-            android:exported="false"
-            android:foregroundServiceType="dataSync" />
-
-        <!-- SMS Result Receiver -->
-        <receiver 
-            android:name=".MainActivity$SmsResultReceiver" 
-            android:exported="true">
-            <intent-filter>
-                <action android:name="SMS_SENT_ACTION" />
-            </intent-filter>
-        </receiver>
-        
-    </application>
-</manifest>
+    <activity
+        android:name=".MainActivity"
+        android:exported="true"
+        android:configChanges="orientation|screenSize|keyboardHidden"
+        android:launchMode="singleTask"
+        android:showWhenLocked="true"
+        android:turnScreenOn="true">
+        <intent-filter>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.LAUNCHER" />
+        </intent-filter>
+    </activity>
+</application>
