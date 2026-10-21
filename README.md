@@ -1,1 +1,0 @@
-# MEHF-SMS-Getway
